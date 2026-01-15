@@ -1,0 +1,12 @@
+{
+  "name": "mnote",
+  "module": "src/index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "commander": "^14.0.2"
+  }
+}
