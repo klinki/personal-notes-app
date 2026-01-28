@@ -1,6 +1,6 @@
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
-import { mkdir, writeFile, readdir, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, readFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
 let MNOTE_HOME = process.env.MNOTE_HOME || join(homedir(), '.mnote');
@@ -83,4 +83,16 @@ export async function getNotes(book: string) {
         }
     }
     return notes.sort((a, b) => a.filename.localeCompare(b.filename));
+}
+
+export async function deleteNote(book: string, index: number) {
+    const notes = await getNotes(book);
+    if (index < 1 || index > notes.length) {
+        throw new Error(`Invalid note index: ${index}`);
+    }
+    const noteToDelete = notes[index - 1];
+    const bookPath = await getBookPath(book);
+    const filePath = join(bookPath, noteToDelete.filename);
+    await unlink(filePath);
+    return noteToDelete.filename;
 }

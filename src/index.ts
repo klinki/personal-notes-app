@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { addNote, getNotes, getBooksRecursive, setDbLocation } from './store';
+import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote } from './store';
 import { openEditor } from './editor';
 
 const program = new Command();
@@ -51,6 +51,19 @@ program.command('view')
         console.log(note.content);
         console.log('');
     });
+  });
+
+program.command('delete')
+  .description('Delete a note from a book')
+  .argument('<book>', 'The name of the book')
+  .argument('<index>', 'The index of the note to delete')
+  .action(async (book, index) => {
+    try {
+        const deletedFile = await deleteNote(book, parseInt(index));
+        console.log(`Deleted note: ${deletedFile}`);
+    } catch (e: any) {
+        console.error('Error deleting note:', e.message);
+    }
   });
 
 program.command('list')
