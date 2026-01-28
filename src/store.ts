@@ -3,7 +3,11 @@ import { homedir } from 'node:os';
 import { mkdir, writeFile, readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
-const MNOTE_HOME = process.env.MNOTE_HOME || join(homedir(), '.mnote');
+let MNOTE_HOME = process.env.MNOTE_HOME || join(homedir(), '.mnote');
+
+export function setDbLocation(path: string) {
+    MNOTE_HOME = resolve(path);
+}
 
 export async function getBookPath(book: string) {
   const resolvedHome = resolve(MNOTE_HOME);

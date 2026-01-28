@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { addNote, getNotes, getBooksRecursive } from './store';
+import { addNote, getNotes, getBooksRecursive, setDbLocation } from './store';
 import { openEditor } from './editor';
 
 const program = new Command();
@@ -7,7 +7,14 @@ const program = new Command();
 program
   .name('mnote')
   .description('A simple markdown-based note taking CLI')
-  .version('0.1.0');
+  .version('0.1.0')
+  .option('--dbLocation <path>', 'Set the database location')
+  .hook('preAction', (thisCommand) => {
+    const opts = thisCommand.opts();
+    if (opts.dbLocation) {
+      setDbLocation(opts.dbLocation);
+    }
+  });
 
 program.command('add')
   .description('Add a note to a book')
