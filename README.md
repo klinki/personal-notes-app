@@ -72,6 +72,17 @@ mnote list
 
 ## Configuration
 
+### Help
+
+You can get help for any command using the `help` command or `--help` / `-h` flags.
+
+```bash
+mnote --help
+mnote help delete
+mnote delete --help
+mnote delete -h
+```
+
 ### Storage Location
 
 By default, notes are stored in `~/.mnote`.

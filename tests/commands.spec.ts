@@ -82,4 +82,29 @@ describe("CLI Commands", () => {
         const viewResult = await runCLI(["view", "deletebook"]);
         expect(viewResult.stdout).toContain("No notes found");
     });
+    it("should show help with --help", async () => {
+        const { stdout, exitCode } = await runCLI(["--help"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain("Usage: mnote");
+        expect(stdout).toContain("Commands:");
+    });
+
+    it("should show command help with help <command>", async () => {
+        const { stdout, exitCode } = await runCLI(["help", "delete"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain("Delete a note from a book");
+        expect(stdout).toContain("Usage: mnote delete");
+    });
+
+    it("should show command help with <command> --help", async () => {
+        const { stdout, exitCode } = await runCLI(["delete", "--help"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain("Delete a note from a book");
+    });
+
+    it("should show command help with <command> -h", async () => {
+        const { stdout, exitCode } = await runCLI(["delete", "-h"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain("Delete a note from a book");
+    });
 });
