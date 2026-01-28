@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
-import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote } from './store';
+import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes } from './store';
 import { openEditor } from './editor';
 
 const program = new Command();
@@ -83,6 +83,36 @@ program.command('delete')
         console.log(`Deleted note: ${deletedFile}`);
     } catch (e: any) {
         console.error('Error deleting note:', e.message);
+    }
+  });
+
+program.command('find')
+  .description('Find notes by keywords')
+  .argument('[keywords...]', 'Keywords to search for')
+  .option('-b, --book <book>', 'book name to find notes in')
+  .action(async (keywords, options) => {
+    try {
+        const keywordString = keywords.join(' ');
+        if (!keywordString) {
+            console.error('Error: at least one keyword is required');
+            process.exit(1);
+        }
+
+        const results = await findNotes(keywordString, options.book);
+        
+        if (results.length === 0) {
+            // No results found
+            return;
+        }
+
+        results.forEach(result => {
+             console.log(`${result.book}: ${result.filename}`);
+             console.log(result.content.trim()); // Printing content snippet (full content for now as per requirement implied by snippet)
+             console.log('');
+        });
+
+    } catch (e: any) {
+         console.error('Error finding notes:', e.message);
     }
   });
 

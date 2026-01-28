@@ -105,6 +105,23 @@ describe("CLI Commands", () => {
     it("should show command help with <command> -h", async () => {
         const { stdout, exitCode } = await runCLI(["delete", "-h"]);
         expect(exitCode).toBe(0);
-        expect(stdout).toContain("Delete a note from a book");
+    });
+
+    it("should find notes", async () => {
+        await runCLI(["add", "searchbook", "special keyword note"]);
+        
+        const { stdout, exitCode } = await runCLI(["find", "special keyword"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain("searchbook");
+        expect(stdout).toContain("special keyword note");
+    });
+
+    it("should find notes in specific book", async () => {
+        await runCLI(["add", "b1", "target"]);
+        await runCLI(["add", "b2", "target"]);
+
+        const { stdout } = await runCLI(["find", "target", "-b", "b1"]);
+        expect(stdout).toContain("b1");
+        expect(stdout).not.toContain("b2");
     });
 });

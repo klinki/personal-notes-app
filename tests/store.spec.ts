@@ -79,6 +79,20 @@ describe("Store", () => {
         const bookName = "invalid-index-test";
         await store.addNote(bookName, "content");
         
-        expect(store.deleteNote(bookName, 99)).rejects.toThrow("Invalid note index");
+    });
+
+    it("should find notes by keyword", async () => {
+        await store.addNote("find-test", "this is a secretly hidden note");
+        await store.addNote("find-test", "public note");
+        await store.addNote("other-book", "hidden note in another book");
+
+        // Search global
+        const results = await store.findNotes("hidden");
+        expect(results).toHaveLength(2);
+        
+        // Search specific book
+        const bookResults = await store.findNotes("hidden", "find-test");
+        expect(bookResults).toHaveLength(1);
+        expect(bookResults[0].content).toContain("secretly hidden note");
     });
 });

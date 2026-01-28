@@ -96,3 +96,42 @@ export async function deleteNote(book: string, index: number) {
     await unlink(filePath);
     return noteToDelete.filename;
 }
+
+export interface SearchResult {
+    book: string;
+    filename: string;
+    content: string;
+}
+
+export async function findNotes(keyword: string, book?: string): Promise<SearchResult[]> {
+    let results: SearchResult[] = [];
+    let booksToSearch: string[] = [];
+
+    if (book) {
+        booksToSearch = [book];
+    } else {
+        booksToSearch = await getBooksRecursive();
+    }
+
+    const lowerKeyword = keyword.toLowerCase();
+
+    for (const b of booksToSearch) {
+        try {
+            const notes = await getNotes(b);
+            for (const note of notes) {
+                if (note.content.toLowerCase().includes(lowerKeyword)) {
+                    results.push({
+                        book: b,
+                        filename: note.filename,
+                        content: note.content
+                    });
+                }
+            }
+        } catch (error) {
+            // Ignore errors if book doesn't exist or can't be read during search
+            continue;
+        }
+    }
+
+    return results;
+}
