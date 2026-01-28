@@ -142,4 +142,37 @@ describe("CLI Commands", () => {
         expect(stdout).toContain(customDir);
         expect(stdout).toContain("--dbLocation flag");
     });
+
+    it("should edit note content inline", async () => {
+        await runCLI(["add", "inline-edit", "old content"]);
+        
+        const { stdout, exitCode } = await runCLI(["edit", "inline-edit", "1", "-c", "new content"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain("Updated note");
+        
+        const view = await runCLI(["view", "inline-edit"]);
+        expect(view.stdout).toContain("new content");
+    });
+
+    it("should move a note via cli", async () => {
+        await runCLI(["add", "move-cli-source", "move me"]);
+        
+        const { stdout, exitCode } = await runCLI(["edit", "move-cli-source", "1", "-b", "move-cli-target"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain("Moved note");
+        
+        const viewTarget = await runCLI(["view", "move-cli-target"]);
+        expect(viewTarget.stdout).toContain("move me");
+    });
+
+    it("should rename a book via cli", async () => {
+        await runCLI(["add", "rename-cli-source", "stay here"]);
+        
+        const { stdout, exitCode } = await runCLI(["edit", "rename-cli-source", "-n", "rename-cli-target"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain("Renamed book");
+        
+        const viewTarget = await runCLI(["view", "rename-cli-target"]);
+        expect(viewTarget.stdout).toContain("stay here");
+    });
 });

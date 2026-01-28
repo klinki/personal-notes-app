@@ -62,6 +62,39 @@ Example:
 mnote view tech/linux
 ```
 
+### Edit Notes
+
+Edit a note or a book.
+
+#### Edit Content
+
+Interactive edit (opens $EDITOR):
+```bash
+mnote edit <book> <index>
+# Example: mnote edit tech/linux 1
+```
+
+Inline update:
+```bash
+mnote edit <book> <index> -c "New content"
+```
+
+#### Move Note
+
+Move a note from one book to another:
+```bash
+mnote edit <book> <index> -b <target_book>
+# Example: mnote edit tech/linux 1 -b archived/linux
+```
+
+#### Rename Book
+
+Rename an entire book:
+```bash
+mnote edit <book> -n <new_name>
+# Example: mnote edit javascript -n ts-migration
+```
+
 ### List Books
 
 List all available books (directories).

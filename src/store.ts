@@ -1,6 +1,6 @@
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
-import { mkdir, writeFile, readdir, readFile, unlink } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, readFile, unlink, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
 let MNOTE_HOME = join(homedir(), '.mnote');
@@ -109,6 +109,59 @@ export async function deleteNote(book: string, index: number) {
     const filePath = join(bookPath, noteToDelete.filename);
     await unlink(filePath);
     return noteToDelete.filename;
+}
+
+export async function getNote(book: string, index: number) {
+    const notes = await getNotes(book);
+    if (index < 1 || index > notes.length) {
+        throw new Error(`Invalid note index: ${index}`);
+    }
+    const note = notes[index - 1];
+    const bookPath = await getBookPath(book);
+    const filePath = join(bookPath, note.filename);
+    
+    return {
+        ...note,
+        path: filePath
+    };
+}
+
+export async function updateNote(book: string, filename: string, content: string) {
+    const bookPath = await getBookPath(book);
+    const filePath = join(bookPath, filename);
+    await writeFile(filePath, content);
+}
+
+export async function moveNote(book: string, index: number, targetBook: string) {
+    const note = await getNote(book, index);
+    // Add to new book (this handles timestamp collision automatically in addNote logic, 
+    // BUT addNote creates a new timestamp. To preserve timestamp or content? 
+    // dnote usually moves. Let's read content and add as new note to target, then delete old.
+    // This assigns a NEW timestamp which is good practice for "created at", 
+    // but maybe we want to keep the old filename?
+    // Let's stick to "addNote" logic for safety and consistency.
+    await addNote(targetBook, note.content);
+    await deleteNote(book, index);
+}
+
+export async function renameBook(oldName: string, newName: string) {
+    const oldPath = await getBookPath(oldName);
+    // getBookPath creates it if missing, but we want to know if it exists to rename
+    if (!existsSync(oldPath)) {
+         throw new Error(`Book "${oldName}" does not exist`);
+    }
+    
+    // We need to calculate new path manually to avoid 'mkdir' side effect of getBookPath on destination check?
+    // Actually getBookPath is fine, it ensures parent exists.
+    // But we need to construct the new path.
+    const root = resolve(MNOTE_HOME); // MNOTE_HOME is module scope var
+    const newPath = join(root, newName);
+    
+    if (existsSync(newPath)) {
+        throw new Error(`Book "${newName}" already exists`);
+    }
+    
+    await rename(oldPath, newPath);
 }
 
 export interface SearchResult {

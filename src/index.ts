@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
-import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo } from './store';
+import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo, getNote, updateNote, moveNote, renameBook } from './store';
 import { openEditor } from './editor';
 
 const program = new Command();
@@ -83,6 +83,72 @@ program.command('delete')
         console.log(`Deleted note: ${deletedFile}`);
     } catch (e: any) {
         console.error('Error deleting note:', e.message);
+    }
+  });
+
+
+
+program.command('edit')
+  .description('Edit a note or a book')
+  .argument('<book>', 'The name of the book')
+  .argument('[index]', 'The index of the note to edit')
+  .option('-c, --content <content>', 'New content for the note')
+  .option('-b, --book <book>', 'Move note to this book')
+  .option('-n, --name <name>', 'Rename the book')
+  .action(async (book, indexStr, options) => {
+    try {
+        // Book Renaming (No index provided)
+        if (!indexStr) {
+            if (options.name) {
+                await renameBook(book, options.name);
+                console.log(`Renamed book "${book}" to "${options.name}".`);
+                return;
+            } else {
+                 console.error('Error: index argument required for note editing, or -n option for book renaming.');
+                 process.exit(1);
+            }
+        }
+
+        // Note Operations (Index provided)
+        const index = parseInt(indexStr, 10);
+        if (isNaN(index)) {
+             console.error('Error: Index must be a number');
+             process.exit(1);
+        }
+
+        if (options.book) {
+            // Move Note
+            await moveNote(book, index, options.book);
+            console.log(`Moved note ${index} from "${book}" to "${options.book}".`);
+            return;
+        }
+
+        const note = await getNote(book, index);
+
+        if (options.content) {
+            // Update content inline
+            await updateNote(book, note.filename, options.content);
+             console.log(`Updated note ${index} in book "${book}".`);
+             return;
+        }
+
+        // Interactive Editor
+        const newContent = await openEditor(note.content);
+
+        if (newContent === null) {
+            console.log('Note content empty or unchanged, not saving.');
+            return;
+        }
+
+        if (newContent !== note.content) {
+            await updateNote(book, note.filename, newContent);
+            console.log(`Updated note ${index} in book "${book}".`);
+        } else {
+             console.log('No changes made.');
+        }
+
+    } catch (e: any) {
+        console.error('Error editing:', e.message);
     }
   });
 

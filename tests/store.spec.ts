@@ -102,4 +102,55 @@ describe("Store", () => {
         // The source depends on env setup in beforeEach, usually env var in these tests
         expect(info.source).toBeDefined(); 
     });
+
+    it("should get and update a note", async () => {
+        await store.addNote("edit-test", "original content");
+        
+        // Get Note
+        const notes = await store.getNotes("edit-test");
+        expect(notes).toHaveLength(1);
+        
+        const note = await store.getNote("edit-test", 1);
+        expect(note.content).toBe("original content");
+        expect(note.filename).toBe(notes[0].filename);
+        expect(note.path).toBeDefined();
+
+        // Update Note
+        await store.updateNote("edit-test", note.filename, "updated content");
+        
+        const updatedNote = await store.getNote("edit-test", 1);
+        expect(updatedNote.content).toBe("updated content");
+    });
+
+
+    it("should move a note", async () => {
+        await store.addNote("move-source", "content to move");
+        
+        // Move
+        await store.moveNote("move-source", 1, "move-target");
+
+        // Verify source empty
+        const sourceNotes = await store.getNotes("move-source");
+        expect(sourceNotes).toHaveLength(0);
+
+        // Verify target has note
+        const targetNotes = await store.getNotes("move-target");
+        expect(targetNotes).toHaveLength(1);
+        expect(targetNotes[0].content).toBe("content to move");
+    });
+
+    it("should rename a book", async () => {
+        await store.addNote("rename-source", "content");
+        
+        await store.renameBook("rename-source", "rename-target");
+
+        // Verify old path gone (or empty if it was just a rename of dir)
+        // Since we rename the dir, the old book name should return empty array from getNotes as it checks existence
+        const oldNotes = await store.getNotes("rename-source");
+        expect(oldNotes).toHaveLength(0);
+
+        const newNotes = await store.getNotes("rename-target");
+        expect(newNotes).toHaveLength(1);
+        expect(newNotes[0].content).toBe("content");
+    });
 });
