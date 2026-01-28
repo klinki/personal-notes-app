@@ -58,4 +58,27 @@ describe("Store", () => {
         const notes = await store.getNotes("non-existent");
         expect(notes).toBeEmpty();
     });
+    it("should delete a note by index", async () => {
+        const bookName = "delete-test";
+        await store.addNote(bookName, "note to delete");
+        await store.addNote(bookName, "note to keep");
+
+        let notes = await store.getNotes(bookName);
+        expect(notes).toHaveLength(2);
+
+        // Delete the first note
+        const deletedFile = await store.deleteNote(bookName, 1);
+        expect(deletedFile).toBeDefined();
+
+        notes = await store.getNotes(bookName);
+        expect(notes).toHaveLength(1);
+        expect(notes[0].content).toBe("note to keep");
+    });
+
+    it("should throw error when deleting invalid index", async () => {
+        const bookName = "invalid-index-test";
+        await store.addNote(bookName, "content");
+        
+        expect(store.deleteNote(bookName, 99)).rejects.toThrow("Invalid note index");
+    });
 });

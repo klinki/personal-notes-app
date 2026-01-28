@@ -72,4 +72,14 @@ describe("CLI Commands", () => {
         const { stdout } = await runCLI(["view", "nosuchbook"]);
         expect(stdout).toContain("No notes found");
     });
+    it("should delete a note with --force", async () => {
+        await runCLI(["add", "deletebook", "note to delete"]);
+        
+        const { stdout, exitCode } = await runCLI(["delete", "deletebook", "1", "--force"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain("Deleted note");
+
+        const viewResult = await runCLI(["view", "deletebook"]);
+        expect(viewResult.stdout).toContain("No notes found");
+    });
 });

@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { createInterface } from 'node:readline';
 import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote } from './store';
 import { openEditor } from './editor';
 
@@ -57,8 +58,27 @@ program.command('delete')
   .description('Delete a note from a book')
   .argument('<book>', 'The name of the book')
   .argument('<index>', 'The index of the note to delete')
-  .action(async (book, index) => {
+  .option('-f, --force', 'Skip confirmation')
+  .action(async (book, index, options) => {
     try {
+        if (!options.force) {
+            const readline = createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+            
+            const answer = await new Promise<string>(resolve => {
+                readline.question(`Are you sure you want to delete note ${index} from book "${book}"? (y/N) `, resolve);
+            });
+            
+            readline.close();
+            
+            if (answer.toLowerCase() !== 'y') {
+                console.log('Aborted.');
+                return;
+            }
+        }
+        
         const deletedFile = await deleteNote(book, parseInt(index));
         console.log(`Deleted note: ${deletedFile}`);
     } catch (e: any) {
