@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
-import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes } from './store';
+import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo } from './store';
 import { openEditor } from './editor';
 
 const program = new Command();
@@ -114,6 +114,16 @@ program.command('find')
     } catch (e: any) {
          console.error('Error finding notes:', e.message);
     }
+  });
+
+
+
+program.command('where')
+  .description('Show current database location')
+  .action(() => {
+    const info = getDbInfo();
+    console.log(info.path);
+    console.log(`(Source: ${info.source})`);
   });
 
 program.command('list')

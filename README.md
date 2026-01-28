@@ -72,6 +72,26 @@ mnote list
 
 ## Configuration
 
+### Find Notes
+
+You can search for notes containing specific keywords:
+
+```bash
+mnote find "important meeting"
+mnote find "project x" --book work
+```
+
+### Check Database Location
+
+To see where your notes are currently stored and which configuration source is being used:
+
+```bash
+mnote where
+# Output:
+# /Users/username/.mnote
+# (Source: standard location)
+```
+
 ### Help
 
 You can get help for any command using the `help` command or `--help` / `-h` flags.

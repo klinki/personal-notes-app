@@ -124,4 +124,22 @@ describe("CLI Commands", () => {
         expect(stdout).toContain("b1");
         expect(stdout).not.toContain("b2");
     });
+
+    it("should show where info", async () => {
+        const { stdout, exitCode } = await runCLI(["where"]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain(TEST_DIR);
+        // In our test setup, MNOTE_HOME is set in runCLI env, so it should say "MNOTE_HOME environment variable"
+        // Wait, looking at store.ts, I set MNOTE_HOME = process.env.MNOTE_HOME.
+        // And runCLI sets MNOTE_HOME. So it should report as env var.
+        expect(stdout).toContain("MNOTE_HOME environment variable");
+    });
+
+    it("should report --dbLocation flag source", async () => {
+        const customDir = "custom-db-loc";
+        const { stdout, exitCode } = await runCLI(["where", "--dbLocation", customDir]);
+        expect(exitCode).toBe(0);
+        expect(stdout).toContain(customDir);
+        expect(stdout).toContain("--dbLocation flag");
+    });
 });

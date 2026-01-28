@@ -3,10 +3,24 @@ import { homedir } from 'node:os';
 import { mkdir, writeFile, readdir, readFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
-let MNOTE_HOME = process.env.MNOTE_HOME || join(homedir(), '.mnote');
+let MNOTE_HOME = join(homedir(), '.mnote');
+let LOCATION_SOURCE = 'standard location';
+
+if (process.env.MNOTE_HOME) {
+    MNOTE_HOME = process.env.MNOTE_HOME;
+    LOCATION_SOURCE = 'MNOTE_HOME environment variable';
+}
 
 export function setDbLocation(path: string) {
     MNOTE_HOME = resolve(path);
+    LOCATION_SOURCE = '--dbLocation flag';
+}
+
+export function getDbInfo() {
+    return {
+        path: resolve(MNOTE_HOME),
+        source: LOCATION_SOURCE
+    };
 }
 
 export async function getBookPath(book: string) {

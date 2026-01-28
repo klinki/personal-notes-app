@@ -95,4 +95,11 @@ describe("Store", () => {
         expect(bookResults).toHaveLength(1);
         expect(bookResults[0].content).toContain("secretly hidden note");
     });
+
+    it("should return correct db info", () => {
+        const info = store.getDbInfo();
+        expect(info.path).toBeDefined();
+        // The source depends on env setup in beforeEach, usually env var in these tests
+        expect(info.source).toBeDefined(); 
+    });
 });
