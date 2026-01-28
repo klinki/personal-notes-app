@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
-import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo, getNote, updateNote, moveNote, renameBook } from './store';
+import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo, getNote, updateNote, moveNote, renameBook, rebuildDB, checkDB } from './store';
 import { openEditor } from './editor';
 
 const program = new Command();
@@ -202,6 +202,42 @@ program.command('list')
     } else {
         books.forEach(book => console.log(book));
     }
+  });
+
+const dbCommand = program.command('database')
+  .description('Database operations');
+
+dbCommand.command('rebuild')
+  .description('Rebuild the search index from markdown files')
+  .action(async () => {
+    try {
+        console.log('Rebuilding database...');
+        await rebuildDB();
+    } catch (e: any) {
+        console.error('Error rebuilding database:', e.message);
+    }
+  });
+
+dbCommand.command('check')
+  .description('Check database consistency')
+  .action(async () => {
+      try {
+          console.log('Checking database...');
+          const result = await checkDB();
+          console.log(`Status: ${result.status}`);
+
+          if (result.missingInDB.length > 0) {
+              console.log('\nMissing in DB (present on disk):');
+              result.missingInDB.forEach(n => console.log(`  - ${n.book}/${n.filename}`));
+          }
+
+          if (result.missingOnDisk.length > 0) {
+              console.log('\nMissing on Disk (present in DB):');
+              result.missingOnDisk.forEach(n => console.log(`  - ${n.book}/${n.filename}`));
+          }
+      } catch (e: any) {
+          console.error('Error checking database:', e.message);
+      }
   });
 
 program.parse();

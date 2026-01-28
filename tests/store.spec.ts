@@ -23,6 +23,9 @@ describe("Store", () => {
 
     afterEach(async () => {
         // Clean up
+        if (store && store.closeDB) {
+             store.closeDB();
+        }
         await rm(TEST_DIR, { recursive: true, force: true });
     });
 

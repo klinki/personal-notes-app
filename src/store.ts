@@ -1,7 +1,8 @@
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { mkdir, writeFile, readdir, readFile, unlink, rename } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
+import { Database } from 'bun:sqlite';
 
 let MNOTE_HOME = join(homedir(), '.mnote');
 let LOCATION_SOURCE = 'standard location';
@@ -33,6 +34,57 @@ export function slugify(text: string): string {
     .replace(/\s+/g, '-') // replace spaces with hyphens
     .replace(/-+/g, '-') // remove consecutive hyphens
     .replace(/^-+|-+$/g, ''); // remove leading/trailing hyphens
+}
+
+let dbInstance: Database | null = null;
+let dbInstancePath: string | null = null;
+
+export function getDB() {
+    const dbPath = join(MNOTE_HOME, 'mnote.db');
+
+    if (dbInstance) {
+        if (dbInstancePath === dbPath) {
+            return dbInstance;
+        }
+        dbInstance.close();
+    }
+
+    if (!existsSync(MNOTE_HOME)) {
+         mkdirSync(MNOTE_HOME, { recursive: true });
+    }
+
+    dbInstance = new Database(dbPath, { create: true });
+    dbInstancePath = dbPath;
+    initDB(dbInstance);
+    return dbInstance;
+}
+
+export function closeDB() {
+    if (dbInstance) {
+        dbInstance.close();
+        dbInstance = null;
+        dbInstancePath = null;
+    }
+}
+
+function initDB(db: Database) {
+    db.run(`
+        CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            book TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            path TEXT NOT NULL UNIQUE,
+            content TEXT
+        );
+    `);
+
+    const ftsExists = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts';").get();
+    if (!ftsExists) {
+        // We use a separate FTS table and will keep it in sync manually for now or via triggers if we went with external content,
+        // but explicit updates are easier to debug in application logic sometimes.
+        // Let's stick to the plan: separate table.
+        db.run(`CREATE VIRTUAL TABLE notes_fts USING fts5(book, filename, path, content);`);
+    }
 }
 
 export async function getBookPath(book: string) {
@@ -85,6 +137,11 @@ export async function addNote(book: string, content: string, title?: string) {
   }
 
   await writeFile(filePath, content);
+  try {
+      indexNote(book, filename, content, filePath);
+  } catch (e: any) {
+      console.error('Warning: Failed to update search index:', e.message);
+  }
   console.log(`Note saved to ${filePath}`);
 }
 
@@ -131,6 +188,11 @@ export async function deleteNote(book: string, index: number) {
     const bookPath = await getBookPath(book);
     const filePath = join(bookPath, noteToDelete.filename);
     await unlink(filePath);
+    try {
+        unindexNote(book, noteToDelete.filename);
+    } catch (e: any) {
+        console.error('Warning: Failed to update search index:', e.message);
+    }
     return noteToDelete.filename;
 }
 
@@ -153,6 +215,11 @@ export async function updateNote(book: string, filename: string, content: string
     const bookPath = await getBookPath(book);
     const filePath = join(bookPath, filename);
     await writeFile(filePath, content);
+    try {
+        indexNote(book, filename, content, filePath);
+    } catch (e: any) {
+        console.error('Warning: Failed to update search index:', e.message);
+    }
 }
 
 export async function moveNote(book: string, index: number, targetBook: string) {
@@ -185,6 +252,63 @@ export async function renameBook(oldName: string, newName: string) {
     }
     
     await rename(oldPath, newPath);
+    try {
+        updateBookInDb(oldName, newName);
+    } catch (e: any) {
+        console.error('Warning: Failed to update search index:', e.message);
+    }
+}
+
+export function indexNote(book: string, filename: string, content: string, path: string) {
+    const db = getDB();
+    const existing = db.query("SELECT id FROM notes WHERE path = $path").get({ $path: path }) as { id: number } | null;
+
+    if (existing) {
+        db.query("UPDATE notes SET book = $book, filename = $filename, content = $content WHERE id = $id")
+          .run({ $book: book, $filename: filename, $content: content, $id: existing.id });
+
+        db.query("DELETE FROM notes_fts WHERE path = $path").run({ $path: path });
+        db.query("INSERT INTO notes_fts (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
+          .run({ $book: book, $filename: filename, $path: path, $content: content });
+    } else {
+        db.query("INSERT INTO notes (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
+          .run({ $book: book, $filename: filename, $path: path, $content: content });
+        db.query("INSERT INTO notes_fts (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
+          .run({ $book: book, $filename: filename, $path: path, $content: content });
+    }
+}
+
+export function unindexNote(book: string, filename: string) {
+    const db = getDB();
+    db.query("DELETE FROM notes WHERE book = $book AND filename = $filename")
+      .run({ $book: book, $filename: filename });
+    db.query("DELETE FROM notes_fts WHERE book = $book AND filename = $filename")
+      .run({ $book: book, $filename: filename });
+}
+
+export function updateBookInDb(oldName: string, newName: string) {
+    const db = getDB();
+    const notes = db.query("SELECT * FROM notes WHERE book = $oldName OR book LIKE $oldNameLike")
+        .all({ $oldName: oldName, $oldNameLike: `${oldName}/%` }) as any[];
+
+    const root = resolve(MNOTE_HOME);
+
+    db.transaction(() => {
+        for (const note of notes) {
+            let newBook = note.book === oldName ? newName : note.book.replace(oldName + '/', newName + '/');
+            // Reconstruct path reliably
+            const newPath = resolve(root, newBook, note.filename);
+
+            // Update notes table
+            db.query("UPDATE notes SET book = $newBook, path = $newPath WHERE id = $id")
+              .run({ $newBook: newBook, $newPath: newPath, $id: note.id });
+
+            // Update FTS table - delete and re-insert is easiest
+            db.query("DELETE FROM notes_fts WHERE path = $path").run({ $path: note.path });
+            db.query("INSERT INTO notes_fts (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
+              .run({ $book: newBook, $filename: note.filename, $path: newPath, $content: note.content });
+        }
+    })();
 }
 
 export interface SearchResult {
@@ -194,34 +318,110 @@ export interface SearchResult {
 }
 
 export async function findNotes(keyword: string, book?: string): Promise<SearchResult[]> {
-    let results: SearchResult[] = [];
-    let booksToSearch: string[] = [];
+    const db = getDB();
+    // Use FTS match. We treat the keyword as a phrase search or prefix search could be added.
+    // To support partial matches like "includes", FTS is limited. We'll use standard FTS match.
+    // We add * to allow prefix matching on the last word if it's not a phrase query.
 
-    if (book) {
-        booksToSearch = [book];
-    } else {
-        booksToSearch = await getBooksRecursive();
+    let matchQuery = keyword;
+    if (!keyword.includes('"')) {
+        // Use prefix search on the last term or the whole query if it's a single word
+        // Simple approach: append * to allow prefix matching.
+        // If keyword is "data", "data*" matches "database".
+        // If keyword is "foo bar", "foo bar*" matches "foo" AND "bar...".
+        matchQuery = `${keyword}*`;
     }
 
-    const lowerKeyword = keyword.toLowerCase();
+    let query = "SELECT book, filename, content FROM notes_fts WHERE notes_fts MATCH $keyword ORDER BY rank";
+    let params: any = { $keyword: matchQuery };
 
-    for (const b of booksToSearch) {
-        try {
-            const notes = await getNotes(b);
-            for (const note of notes) {
-                if (note.content.toLowerCase().includes(lowerKeyword)) {
-                    results.push({
-                        book: b,
-                        filename: note.filename,
-                        content: note.content
-                    });
-                }
+    if (book) {
+         query = "SELECT book, filename, content FROM notes_fts WHERE notes_fts MATCH $keyword AND book = $book ORDER BY rank";
+         params = { $keyword: matchQuery, $book: book };
+    }
+
+    try {
+        const results = db.query(query).all(params) as SearchResult[];
+        return results;
+    } catch (e: any) {
+        console.error("Search error:", e.message);
+        return [];
+    }
+}
+
+export async function rebuildDB() {
+    const db = getDB();
+    // Clear tables
+    db.run("DELETE FROM notes");
+    db.run("DELETE FROM notes_fts");
+
+    // Reset sequence
+    db.run("DELETE FROM sqlite_sequence WHERE name='notes'");
+
+    // Re-index
+    const books = await getBooksRecursive();
+    let count = 0;
+    for (const book of books) {
+        const notes = await getNotes(book);
+        for (const note of notes) {
+            // Reconstruct path
+            const bookPath = await getBookPath(book);
+            const filePath = join(bookPath, note.filename);
+            try {
+                indexNote(book, note.filename, note.content, filePath);
+                count++;
+            } catch (e: any) {
+                console.error(`Failed to index ${filePath}: ${e.message}`);
             }
-        } catch (error) {
-            // Ignore errors if book doesn't exist or can't be read during search
-            continue;
+        }
+    }
+    console.log(`Rebuild complete. Indexed ${count} notes.`);
+}
+
+export interface DBCheckResult {
+    status: 'consistent' | 'inconsistent';
+    missingOnDisk: { book: string, filename: string }[];
+    missingInDB: { book: string, filename: string }[];
+}
+
+export async function checkDB(): Promise<DBCheckResult> {
+    const db = getDB();
+    const dbNotes = db.query("SELECT book, filename, path FROM notes").all() as { book: string, filename: string, path: string }[];
+
+    // Build set of DB keys (book/filename)
+    const dbSet = new Set(dbNotes.map(n => `${n.book}/${n.filename}`));
+
+    const missingInDB: { book: string, filename: string }[] = [];
+    const missingOnDisk: { book: string, filename: string }[] = [];
+
+    // Check disk vs DB
+    const books = await getBooksRecursive();
+    const diskSet = new Set<string>();
+
+    for (const book of books) {
+        const notes = await getNotes(book);
+        for (const note of notes) {
+            const key = `${book}/${note.filename}`;
+            diskSet.add(key);
+            if (!dbSet.has(key)) {
+                missingInDB.push({ book, filename: note.filename });
+            }
         }
     }
 
-    return results;
+    // Check DB vs disk
+    for (const dbNote of dbNotes) {
+        const key = `${dbNote.book}/${dbNote.filename}`;
+        if (!diskSet.has(key)) {
+             missingOnDisk.push({ book: dbNote.book, filename: dbNote.filename });
+        }
+    }
+
+    const status = (missingInDB.length === 0 && missingOnDisk.length === 0) ? 'consistent' : 'inconsistent';
+
+    return {
+        status,
+        missingOnDisk,
+        missingInDB
+    };
 }
