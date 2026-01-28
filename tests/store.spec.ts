@@ -26,6 +26,14 @@ describe("Store", () => {
         await rm(TEST_DIR, { recursive: true, force: true });
     });
 
+    it("should slugify text correctly", () => {
+        expect(store.slugify("Hello World")).toBe("hello-world");
+        expect(store.slugify("První český post")).toBe("prvni-cesky-post");
+        expect(store.slugify("  Spaces   ")).toBe("spaces");
+        expect(store.slugify("Special # chars!")).toBe("special-chars");
+        expect(store.slugify("---Multiple---Dashes---")).toBe("multiple-dashes");
+    });
+
     it("should create a book directory when getting book path", async () => {
         const bookName = "test-book";
         const path = await store.getBookPath(bookName);
@@ -41,6 +49,64 @@ describe("Store", () => {
         const notes = await store.getNotes(bookName);
         expect(notes).toHaveLength(1);
         expect(notes[0].content).toBe(content);
+        // Expect filename to be YYYY-MM-DD-hello-world.md
+        expect(notes[0].filename).toMatch(/^\d{4}-\d{2}-\d{2}-hello-world\.md$/);
+    });
+
+    it("should add a note with explicit title", async () => {
+        const bookName = "titled-notes";
+        const content = "Some content";
+        const title = "My Special Note";
+        await store.addNote(bookName, content, title);
+
+        const notes = await store.getNotes(bookName);
+        expect(notes).toHaveLength(1);
+        expect(notes[0].filename).toMatch(/^\d{4}-\d{2}-\d{2}-my-special-note\.md$/);
+    });
+
+    it("should extract title from content content", async () => {
+        const bookName = "extracted-title";
+        const content = "# First Line Header\nRest of the note";
+        await store.addNote(bookName, content);
+
+        const notes = await store.getNotes(bookName);
+        expect(notes).toHaveLength(1);
+        expect(notes[0].filename).toMatch(/^\d{4}-\d{2}-\d{2}-first-line-header\.md$/);
+    });
+
+    it("should default to untitled if no title found", async () => {
+        const bookName = "untitled-notes";
+        const content = ""; // Empty content
+        await store.addNote(bookName, content);
+
+        const notes = await store.getNotes(bookName);
+        expect(notes).toHaveLength(1);
+        expect(notes[0].filename).toMatch(/^\d{4}-\d{2}-\d{2}-untitled\.md$/);
+    });
+
+    it("should handle filename collisions", async () => {
+        const bookName = "collision-test";
+        const title = "Same Title";
+
+        await store.addNote(bookName, "content 1", title);
+        await store.addNote(bookName, "content 2", title);
+        await store.addNote(bookName, "content 3", title);
+
+        const notes = await store.getNotes(bookName);
+        expect(notes).toHaveLength(3);
+
+        const filenames = notes.map(n => n.filename).sort();
+        // Expected: date-same-title.md, date-same-title-1.md, date-same-title-2.md
+        // We can verify they match the pattern
+        expect(filenames[0]).toMatch(/^\d{4}-\d{2}-\d{2}-same-title(-\d+)?\.md$/);
+        expect(filenames[1]).toMatch(/^\d{4}-\d{2}-\d{2}-same-title(-\d+)?\.md$/);
+        expect(filenames[2]).toMatch(/^\d{4}-\d{2}-\d{2}-same-title(-\d+)?\.md$/);
+
+        // More strict check
+        const base = filenames.find(f => !f.match(/-\d+\.md$/));
+        expect(base).toBeDefined();
+        const numbered = filenames.filter(f => f.match(/-\d+\.md$/));
+        expect(numbered).toHaveLength(2);
     });
 
     it("should list books recursively", async () => {
