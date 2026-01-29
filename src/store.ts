@@ -54,6 +54,11 @@ export function getDB() {
     }
 
     dbInstance = new Database(dbPath, { create: true });
+    // Enable WAL mode for better concurrency and less file locking
+    dbInstance.run("PRAGMA journal_mode = WAL;");
+    // Enable busy timeout (5000ms) to handle concurrency/locking
+    dbInstance.run("PRAGMA busy_timeout = 5000;");
+    
     dbInstancePath = dbPath;
     initDB(dbInstance);
     return dbInstance;
@@ -261,29 +266,34 @@ export async function renameBook(oldName: string, newName: string) {
 
 export function indexNote(book: string, filename: string, content: string, path: string) {
     const db = getDB();
-    const existing = db.query("SELECT id FROM notes WHERE path = $path").get({ $path: path }) as { id: number } | null;
+    const existing = db.query("SELECT id FROM notes WHERE book = $book AND filename = $filename").get({ $book: book, $filename: filename }) as { id: number } | null;
+    db.transaction(() => {
+        if (existing) {
+            db.query("UPDATE notes SET book = $book, filename = $filename, content = $content WHERE id = $id")
+              .run({ $book: book, $filename: filename, $content: content, $id: existing.id });
 
-    if (existing) {
-        db.query("UPDATE notes SET book = $book, filename = $filename, content = $content WHERE id = $id")
-          .run({ $book: book, $filename: filename, $content: content, $id: existing.id });
-
-        db.query("DELETE FROM notes_fts WHERE path = $path").run({ $path: path });
-        db.query("INSERT INTO notes_fts (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
-          .run({ $book: book, $filename: filename, $path: path, $content: content });
-    } else {
-        db.query("INSERT INTO notes (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
-          .run({ $book: book, $filename: filename, $path: path, $content: content });
-        db.query("INSERT INTO notes_fts (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
-          .run({ $book: book, $filename: filename, $path: path, $content: content });
-    }
+            db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: existing.id });
+            db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
+              .run({ $id: existing.id, $book: book, $filename: filename, $path: path, $content: content });
+        } else {
+            const result = db.query("INSERT INTO notes (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
+              .run({ $book: book, $filename: filename, $path: path, $content: content });
+            
+            const lastId = result.lastInsertRowid;
+            db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
+              .run({ $id: lastId, $book: book, $filename: filename, $path: path, $content: content });
+        }
+    })();
 }
 
 export function unindexNote(book: string, filename: string) {
     const db = getDB();
-    db.query("DELETE FROM notes WHERE book = $book AND filename = $filename")
-      .run({ $book: book, $filename: filename });
-    db.query("DELETE FROM notes_fts WHERE book = $book AND filename = $filename")
-      .run({ $book: book, $filename: filename });
+    const note = db.query("SELECT id FROM notes WHERE book = $book AND filename = $filename").get({ $book: book, $filename: filename }) as { id: number } | null;
+    
+    if (note) {
+        db.query("DELETE FROM notes WHERE id = $id").run({ $id: note.id });
+        db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: note.id });
+    }
 }
 
 export function updateBookInDb(oldName: string, newName: string) {
@@ -304,9 +314,9 @@ export function updateBookInDb(oldName: string, newName: string) {
               .run({ $newBook: newBook, $newPath: newPath, $id: note.id });
 
             // Update FTS table - delete and re-insert is easiest
-            db.query("DELETE FROM notes_fts WHERE path = $path").run({ $path: note.path });
-            db.query("INSERT INTO notes_fts (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
-              .run({ $book: newBook, $filename: note.filename, $path: newPath, $content: note.content });
+            db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: note.id });
+            db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
+              .run({ $id: note.id, $book: newBook, $filename: note.filename, $path: newPath, $content: note.content });
         }
     })();
 }
@@ -318,6 +328,17 @@ export interface SearchResult {
 }
 
 export async function findNotes(keyword: string, book?: string): Promise<SearchResult[]> {
+    const dbPath = join(MNOTE_HOME, 'mnote.db');
+    if (!existsSync(dbPath)) {
+        console.error('Database not found. Rebuilding from notes...');
+        try {
+            await rebuildDB();
+        } catch (e: any) {
+             console.error('Failed to rebuild database:', e.message);
+             return [];
+        }
+    }
+
     const db = getDB();
     // Use FTS match. We treat the keyword as a phrase search or prefix search could be added.
     // To support partial matches like "includes", FTS is limited. We'll use standard FTS match.
