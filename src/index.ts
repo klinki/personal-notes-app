@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
-import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo, getNote, updateNote, moveNote, renameBook } from './store';
+import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo, getNote, updateNote, moveNote, renameBook, getTemplates, applyTemplate } from './store';
 import { openEditor } from './editor';
 
 const program = new Command();
@@ -21,20 +21,42 @@ program.command('add')
   .description('Add a note to a book')
   .argument('<book>', 'The name of the book')
   .argument('[content]', 'The content of the note')
-  .action(async (book, content) => {
+  .option('-t, --template <name>', 'Use a template')
+  .option('--tags <tags>', 'Comma separated tags')
+  .action(async (book, content, options) => {
     try {
+        const tags = options.tags ? options.tags.split(',').map((t: string) => t.trim()) : undefined;
+
         if (content) {
-            await addNote(book, content);
+            await addNote(book, content, { template: options.template, tags });
         } else {
-            const editorContent = await openEditor();
+            let initialContent = '';
+            if (options.template) {
+                initialContent = await applyTemplate(options.template);
+            }
+
+            const editorContent = await openEditor(initialContent);
             if (editorContent) {
-                await addNote(book, editorContent);
+                // If we used a template, it's already in editorContent.
+                // We pass tags, but NOT template again.
+                await addNote(book, editorContent, { tags });
             } else {
                 console.log('Empty note, not saved.');
             }
         }
     } catch (e: any) {
         console.error('Error adding note:', e.message);
+    }
+  });
+
+program.command('templates')
+  .description('List available templates')
+  .action(async () => {
+    const templates = await getTemplates();
+    if (templates.length === 0) {
+        console.log('No templates found.');
+    } else {
+        templates.forEach(t => console.log(t));
     }
   });
 
@@ -156,15 +178,16 @@ program.command('find')
   .description('Find notes by keywords')
   .argument('[keywords...]', 'Keywords to search for')
   .option('-b, --book <book>', 'book name to find notes in')
+  .option('--tag <tag>', 'Filter by tag')
   .action(async (keywords, options) => {
     try {
         const keywordString = keywords.join(' ');
-        if (!keywordString) {
-            console.error('Error: at least one keyword is required');
+        if (!keywordString && !options.tag) {
+            console.error('Error: at least one keyword or tag is required');
             process.exit(1);
         }
 
-        const results = await findNotes(keywordString, options.book);
+        const results = await findNotes(keywordString, options.book, options.tag);
         
         if (results.length === 0) {
             // No results found

@@ -2,6 +2,7 @@ import { join, resolve, relative, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { mkdir, writeFile, readdir, readFile, unlink, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import matter from 'gray-matter';
 
 let MNOTE_HOME = join(homedir(), '.mnote');
 let LOCATION_SOURCE = 'standard location';
@@ -37,7 +38,48 @@ export async function getBookPath(book: string) {
   return path;
 }
 
-export async function addNote(book: string, content: string) {
+export async function getTemplates() {
+    const templatesDir = join(MNOTE_HOME, '.foam', 'templates');
+    if (!existsSync(templatesDir)) {
+        return [];
+    }
+    const entries = await readdir(templatesDir, { withFileTypes: true });
+    return entries
+        .filter(e => e.isFile() && e.name.endsWith('.md'))
+        .map(e => e.name);
+}
+
+export async function applyTemplate(templateName: string) {
+    const templatePath = join(MNOTE_HOME, '.foam', 'templates', templateName);
+    if (!existsSync(templatePath)) {
+        throw new Error(`Template "${templateName}" not found.`);
+    }
+    let content = await readFile(templatePath, 'utf-8');
+
+    const now = new Date();
+    const vars: Record<string, string> = {
+        '$DATE_YEAR': String(now.getFullYear()),
+        '$DATE_MONTH': String(now.getMonth() + 1).padStart(2, '0'),
+        '$DATE_DAY': String(now.getDate()).padStart(2, '0'),
+        '$DATE_HOUR': String(now.getHours()).padStart(2, '0'),
+        '$DATE_MINUTE': String(now.getMinutes()).padStart(2, '0'),
+        '$DATE_SECOND': String(now.getSeconds()).padStart(2, '0'),
+        '$FOAM_TITLE': 'untitled' // Default, can be overridden if we had title logic
+    };
+
+    for (const [key, value] of Object.entries(vars)) {
+        content = content.split(key).join(value);
+    }
+
+    return content;
+}
+
+export interface AddNoteOptions {
+    template?: string;
+    tags?: string[];
+}
+
+export async function addNote(book: string, content: string, options: AddNoteOptions = {}) {
   const bookPath = await getBookPath(book);
 
   // Create a timestamp-based filename with milliseconds
@@ -61,7 +103,38 @@ export async function addNote(book: string, content: string) {
       counter++;
   }
 
-  await writeFile(filePath, content);
+  // Handle Templates
+  let finalContent = content;
+  if (options.template) {
+      let templateContent = await applyTemplate(options.template);
+
+      // Merge content: if user provided content, append it to template or vice versa?
+      // Usually template is the base.
+      // If content is provided (e.g. via editor), we might want to just append it
+      // or if content is empty, just use template.
+      if (finalContent) {
+          templateContent += '\n' + finalContent;
+      }
+      finalContent = templateContent;
+  }
+
+  // Handle Tags via Frontmatter
+  if (options.tags && options.tags.length > 0) {
+      const parsed = matter(finalContent);
+      const existingTags = parsed.data.tags || [];
+      const newTags = Array.isArray(existingTags)
+          ? [...new Set([...existingTags, ...options.tags])]
+          : [...new Set([existingTags, ...options.tags])]; // Handle case where tags is string
+
+      parsed.data.tags = newTags;
+      finalContent = matter.stringify(parsed.content, parsed.data);
+  } else if (options.template) {
+      // Even if no extra tags, we should ensure template frontmatter is preserved/parsed correctly if needed
+      // But simple string concat works for simple templates.
+      // However, applyTemplate returns string.
+  }
+
+  await writeFile(filePath, finalContent);
   console.log(`Note saved to ${filePath}`);
 }
 
@@ -170,7 +243,7 @@ export interface SearchResult {
     content: string;
 }
 
-export async function findNotes(keyword: string, book?: string): Promise<SearchResult[]> {
+export async function findNotes(keyword: string, book?: string, tag?: string): Promise<SearchResult[]> {
     let results: SearchResult[] = [];
     let booksToSearch: string[] = [];
 
@@ -180,13 +253,35 @@ export async function findNotes(keyword: string, book?: string): Promise<SearchR
         booksToSearch = await getBooksRecursive();
     }
 
-    const lowerKeyword = keyword.toLowerCase();
+    const lowerKeyword = keyword ? keyword.toLowerCase() : '';
 
     for (const b of booksToSearch) {
         try {
             const notes = await getNotes(b);
             for (const note of notes) {
-                if (note.content.toLowerCase().includes(lowerKeyword)) {
+                const parsed = matter(note.content);
+                const contentLower = parsed.content.toLowerCase(); // Search in content body? or full raw content?
+                // Usually "find" searches body. But raw content is safer if we want to find stuff in YAML too.
+                // But specifically for TAG search:
+
+                let matchesKeyword = true;
+                if (lowerKeyword) {
+                    matchesKeyword = note.content.toLowerCase().includes(lowerKeyword);
+                }
+
+                let matchesTag = true;
+                if (tag) {
+                    const noteTags = parsed.data.tags;
+                    if (!noteTags) {
+                        matchesTag = false;
+                    } else if (Array.isArray(noteTags)) {
+                        matchesTag = noteTags.includes(tag);
+                    } else {
+                        matchesTag = noteTags === tag;
+                    }
+                }
+
+                if (matchesKeyword && matchesTag) {
                     results.push({
                         book: b,
                         filename: note.filename,
