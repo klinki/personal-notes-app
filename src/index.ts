@@ -21,14 +21,15 @@ program.command('add')
   .description('Add a note to a book')
   .argument('<book>', 'The name of the book')
   .argument('[content]', 'The content of the note')
-  .action(async (book, content) => {
+  .option('-t, --title <title>', 'The title of the note')
+  .action(async (book, content, options) => {
     try {
         if (content) {
-            await addNote(book, content);
+            await addNote(book, content, options.title);
         } else {
             const editorContent = await openEditor();
             if (editorContent) {
-                await addNote(book, editorContent);
+                await addNote(book, editorContent, options.title);
             } else {
                 console.log('Empty note, not saved.');
             }

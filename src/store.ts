@@ -23,6 +23,18 @@ export function getDbInfo() {
     };
 }
 
+export function slugify(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove diacritics
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '') // remove non-alphanumeric chars
+    .replace(/\s+/g, '-') // replace spaces with hyphens
+    .replace(/-+/g, '-') // remove consecutive hyphens
+    .replace(/^-+|-+$/g, ''); // remove leading/trailing hyphens
+}
+
 export async function getBookPath(book: string) {
   const resolvedHome = resolve(MNOTE_HOME);
   const path = resolve(resolvedHome, book);
@@ -37,26 +49,37 @@ export async function getBookPath(book: string) {
   return path;
 }
 
-export async function addNote(book: string, content: string) {
+export async function addNote(book: string, content: string, title?: string) {
   const bookPath = await getBookPath(book);
 
-  // Create a timestamp-based filename with milliseconds
-  const now = new Date();
-  const timestamp = now.getFullYear() +
-    '-' + String(now.getMonth() + 1).padStart(2, '0') +
-    '-' + String(now.getDate()).padStart(2, '0') +
-    '-' + String(now.getHours()).padStart(2, '0') +
-    '-' + String(now.getMinutes()).padStart(2, '0') +
-    '-' + String(now.getSeconds()).padStart(2, '0') +
-    '-' + String(now.getMilliseconds()).padStart(3, '0');
+  let finalTitle = title;
 
-  let filename = `${timestamp}.md`;
+  if (!finalTitle) {
+      // Try to parse from first line of content
+      const firstLine = content.split('\n')[0].trim();
+      // Remove leading #, -, *, etc if it looks like a header or list item
+      const cleanLine = firstLine.replace(/^[\s#\-\*]+/, '').trim();
+      if (cleanLine.length > 0) {
+          finalTitle = cleanLine;
+      } else {
+          finalTitle = 'untitled';
+      }
+  }
+
+  const slug = slugify(finalTitle);
+
+  const now = new Date();
+  const datePrefix = now.getFullYear() +
+    '-' + String(now.getMonth() + 1).padStart(2, '0') +
+    '-' + String(now.getDate()).padStart(2, '0');
+
+  let filename = `${datePrefix}-${slug}.md`;
   let filePath = join(bookPath, filename);
 
   // Collision check
   let counter = 1;
   while (existsSync(filePath)) {
-      filename = `${timestamp}-${counter}.md`;
+      filename = `${datePrefix}-${slug}-${counter}.md`;
       filePath = join(bookPath, filename);
       counter++;
   }
