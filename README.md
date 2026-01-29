@@ -103,8 +103,6 @@ List all available books (directories).
 mnote list
 ```
 
-## Configuration
-
 ### Find Notes
 
 You can search for notes containing specific keywords:
@@ -136,6 +134,45 @@ mnote delete --help
 mnote delete -h
 ```
 
+## Configuration
+
+### Manage Configuration
+
+You can configure `mnote` using the `config` command. The configuration is stored in `config.json` in the `mnote` home directory.
+
+#### Set Configuration
+
+```bash
+mnote config set <key> <value>
+```
+
+Values are parsed as JSON if possible, otherwise stored as strings. Dot notation is supported for nested keys.
+
+Example:
+```bash
+mnote config set editor "nano"
+mnote config set ui.theme.dark true
+```
+
+#### Get Configuration
+
+```bash
+mnote config get <key>
+```
+
+Example:
+```bash
+mnote config get editor
+```
+
+### Configuration Precedence
+
+For configuration options (like `editor`), the order of precedence is:
+
+1.  Environment variable (e.g., `EDITOR`)
+2.  Configuration file (`config.json`)
+3.  Default value
+
 ### Storage Location
 
 By default, notes are stored in `~/.mnote`.
@@ -148,11 +185,18 @@ mnote list
 
 ### Editor
 
-`mnote` uses the `$EDITOR` environment variable to determine which editor to open. Default is `vi`.
+`mnote` determines which editor to use based on the following precedence:
+1. `EDITOR` environment variable.
+2. `editor` value in configuration.
+3. Default: `vi`.
 
 ```bash
+# Using env var
 export EDITOR=nano
 mnote add mybook
+
+# Using config
+mnote config set editor code
 ```
 
 ## File Structure

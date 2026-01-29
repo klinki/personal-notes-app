@@ -2,9 +2,10 @@ import { spawn } from 'bun';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFile, readFile, unlink } from 'node:fs/promises';
+import { getEditorConfig } from './config';
 
 export async function openEditor(initialContent = ''): Promise<string | null> {
-  const editor = process.env.EDITOR || 'vi';
+  const editor = await getEditorConfig();
   const tmpPath = join(tmpdir(), `mnote-edit-${Date.now()}.md`);
 
   await writeFile(tmpPath, initialContent);

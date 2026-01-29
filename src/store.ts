@@ -24,6 +24,10 @@ export function getDbInfo() {
     };
 }
 
+export function getConfigPath() {
+    return join(MNOTE_HOME, 'config.json');
+}
+
 export function slugify(text: string): string {
   return text
     .normalize('NFD')

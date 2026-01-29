@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { createInterface } from 'node:readline';
 import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo, getNote, updateNote, moveNote, renameBook, rebuildDB, checkDB } from './store';
 import { openEditor } from './editor';
+import { getConfig, setConfig } from './config';
 
 const program = new Command();
 
@@ -237,6 +238,35 @@ dbCommand.command('check')
           }
       } catch (e: any) {
           console.error('Error checking database:', e.message);
+      }
+  });
+
+const configCommand = program.command('config')
+  .description('Configuration operations');
+
+configCommand.command('get')
+  .description('Get a configuration value')
+  .argument('<key>', 'The configuration key')
+  .action(async (key) => {
+      try {
+          const value = await getConfig(key);
+          console.log(JSON.stringify(value, null, 2));
+      } catch (e: any) {
+          console.error(e.message);
+          process.exit(1);
+      }
+  });
+
+configCommand.command('set')
+  .description('Set a configuration value')
+  .argument('<key>', 'The configuration key')
+  .argument('<value>', 'The value to set')
+  .action(async (key, value) => {
+      try {
+          await setConfig(key, value);
+      } catch (e: any) {
+          console.error(e.message);
+          process.exit(1);
       }
   });
 
