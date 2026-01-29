@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { mkdir, writeFile, readdir, readFile, unlink, rename } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
+import matter from 'gray-matter';
 
 let MNOTE_HOME = join(homedir(), '.mnote');
 let LOCATION_SOURCE = 'standard location';
@@ -29,15 +30,15 @@ export function getConfigPath() {
 }
 
 export function slugify(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // remove diacritics
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, '') // remove non-alphanumeric chars
-    .replace(/\s+/g, '-') // replace spaces with hyphens
-    .replace(/-+/g, '-') // remove consecutive hyphens
-    .replace(/^-+|-+$/g, ''); // remove leading/trailing hyphens
+    return text
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // remove diacritics
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, '') // remove non-alphanumeric chars
+        .replace(/\s+/g, '-') // replace spaces with hyphens
+        .replace(/-+/g, '-') // remove consecutive hyphens
+        .replace(/^-+|-+$/g, ''); // remove leading/trailing hyphens
 }
 
 let dbInstance: Database | null = null;
@@ -54,7 +55,7 @@ export function getDB() {
     }
 
     if (!existsSync(MNOTE_HOME)) {
-         mkdirSync(MNOTE_HOME, { recursive: true });
+        mkdirSync(MNOTE_HOME, { recursive: true });
     }
 
     dbInstance = new Database(dbPath, { create: true });
@@ -62,7 +63,7 @@ export function getDB() {
     dbInstance.run("PRAGMA journal_mode = WAL;");
     // Enable busy timeout (5000ms) to handle concurrency/locking
     dbInstance.run("PRAGMA busy_timeout = 5000;");
-    
+
     dbInstancePath = dbPath;
     initDB(dbInstance);
     return dbInstance;
@@ -97,79 +98,152 @@ function initDB(db: Database) {
 }
 
 export async function getBookPath(book: string) {
-  const resolvedHome = resolve(MNOTE_HOME);
-  const path = resolve(resolvedHome, book);
+    const resolvedHome = resolve(MNOTE_HOME);
+    const path = resolve(resolvedHome, book);
 
-  const rel = relative(resolvedHome, path);
+    const rel = relative(resolvedHome, path);
 
-  if (rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error(`Invalid book name: ${book} attempts to traverse outside home directory`);
-  }
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+        throw new Error(`Invalid book name: ${book} attempts to traverse outside home directory`);
+    }
 
-  await mkdir(path, { recursive: true });
-  return path;
+    await mkdir(path, { recursive: true });
+    return path;
 }
 
-export async function addNote(book: string, content: string, title?: string) {
-  const bookPath = await getBookPath(book);
+export async function getTemplates() {
+    const templatesDir = join(MNOTE_HOME, '.foam', 'templates');
+    if (!existsSync(templatesDir)) {
+        return [];
+    }
+    const entries = await readdir(templatesDir, { withFileTypes: true });
+    return entries
+        .filter(e => e.isFile() && e.name.endsWith('.md'))
+        .map(e => e.name);
+}
 
-  let finalTitle = title;
+export async function applyTemplate(templateName: string) {
+    const templatePath = join(MNOTE_HOME, '.foam', 'templates', templateName);
+    if (!existsSync(templatePath)) {
+        throw new Error(`Template "${templateName}" not found.`);
+    }
+    let content = await readFile(templatePath, 'utf-8');
 
-  if (!finalTitle) {
-      // Try to parse from first line of content
-      const firstLine = content.split('\n')[0].trim();
-      // Remove leading #, -, *, etc if it looks like a header or list item
-      const cleanLine = firstLine.replace(/^[\s#\-\*]+/, '').trim();
-      if (cleanLine.length > 0) {
-          finalTitle = cleanLine;
-      } else {
-          finalTitle = 'untitled';
-      }
-  }
+    const now = new Date();
+    const vars: Record<string, string> = {
+        '$DATE_YEAR': String(now.getFullYear()),
+        '$DATE_MONTH': String(now.getMonth() + 1).padStart(2, '0'),
+        '$DATE_DAY': String(now.getDate()).padStart(2, '0'),
+        '$DATE_HOUR': String(now.getHours()).padStart(2, '0'),
+        '$DATE_MINUTE': String(now.getMinutes()).padStart(2, '0'),
+        '$DATE_SECOND': String(now.getSeconds()).padStart(2, '0'),
+        '$FOAM_TITLE': 'untitled' // Default, can be overridden if we had title logic
+    };
 
-  const slug = slugify(finalTitle);
+    for (const [key, value] of Object.entries(vars)) {
+        content = content.split(key).join(value);
+    }
 
-  const now = new Date();
-  const datePrefix = now.getFullYear() +
-    '-' + String(now.getMonth() + 1).padStart(2, '0') +
-    '-' + String(now.getDate()).padStart(2, '0');
+    return content;
+}
 
-  let filename = `${datePrefix}-${slug}.md`;
-  let filePath = join(bookPath, filename);
+export interface AddNoteOptions {
+    template?: string;
+    tags?: string[];
+    title?: string;
+}
 
-  // Collision check
-  let counter = 1;
-  while (existsSync(filePath)) {
-      filename = `${datePrefix}-${slug}-${counter}.md`;
-      filePath = join(bookPath, filename);
-      counter++;
-  }
+export async function addNote(book: string, content: string, options: AddNoteOptions = {}) {
+    const bookPath = await getBookPath(book);
 
-  await writeFile(filePath, content);
-  try {
-      indexNote(book, filename, content, filePath);
-  } catch (e: any) {
-      console.error('Warning: Failed to update search index:', e.message);
-  }
-  console.log(`Note saved to ${filePath}`);
+    let finalTitle = options.title;
+
+    if (!finalTitle) {
+        // Try to parse from first line of content
+        const firstLine = content.split('\n')[0].trim();
+        // Remove leading #, -, *, etc if it looks like a header or list item
+        const cleanLine = firstLine.replace(/^[\s#\-\*]+/, '').trim();
+        if (cleanLine.length > 0) {
+            finalTitle = cleanLine;
+        } else {
+            finalTitle = 'untitled';
+        }
+    }
+
+    const slug = slugify(finalTitle);
+
+    const now = new Date();
+    const datePrefix = now.getFullYear() +
+        '-' + String(now.getMonth() + 1).padStart(2, '0') +
+        '-' + String(now.getDate()).padStart(2, '0');
+
+    let filename = `${datePrefix}-${slug}.md`;
+    let filePath = join(bookPath, filename);
+
+    // Collision check
+    let counter = 1;
+    while (existsSync(filePath)) {
+        filename = `${datePrefix}-${slug}-${counter}.md`;
+        filePath = join(bookPath, filename);
+        counter++;
+    }
+
+    // Handle Templates
+    let finalContent = content;
+    if (options.template) {
+        let templateContent = await applyTemplate(options.template);
+
+        // Merge content: if user provided content, append it to template or vice versa?
+        // Usually template is the base.
+        // If content is provided (e.g. via editor), we might want to just append it
+        // or if content is empty, just use template.
+        if (finalContent) {
+            templateContent += '\n' + finalContent;
+        }
+        finalContent = templateContent;
+    }
+
+    // Handle Tags via Frontmatter
+    if (options.tags && options.tags.length > 0) {
+        const parsed = matter(finalContent);
+        const existingTags = parsed.data.tags || [];
+        const newTags = Array.isArray(existingTags)
+            ? [...new Set([...existingTags, ...options.tags])]
+            : [...new Set([existingTags, ...options.tags])]; // Handle case where tags is string
+
+        parsed.data.tags = newTags;
+        finalContent = matter.stringify(parsed.content, parsed.data);
+    } else if (options.template) {
+        // Even if no extra tags, we should ensure template frontmatter is preserved/parsed correctly if needed
+        // But simple string concat works for simple templates.
+        // However, applyTemplate returns string.
+    }
+
+    await writeFile(filePath, finalContent);
+    try {
+        indexNote(book, filename, finalContent, filePath);
+    } catch (e: any) {
+        console.error('Warning: Failed to update search index:', e.message);
+    }
+    console.log(`Note saved to ${filePath}`);
 }
 
 export async function getBooksRecursive(dir = MNOTE_HOME, parent = ''): Promise<string[]> {
-  if (!existsSync(dir)) return [];
+    if (!existsSync(dir)) return [];
 
-  let books: string[] = [];
-  const entries = await readdir(dir, { withFileTypes: true });
-  entries.sort((a, b) => a.name.localeCompare(b.name));
+    let books: string[] = [];
+    const entries = await readdir(dir, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
 
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const bookName = parent ? `${parent}/${entry.name}` : entry.name;
-      books.push(bookName);
-      const subBooks = await getBooksRecursive(join(dir, entry.name), bookName);
-      books = books.concat(subBooks);
+    for (const entry of entries) {
+        if (entry.isDirectory()) {
+            const bookName = parent ? `${parent}/${entry.name}` : entry.name;
+            books.push(bookName);
+            const subBooks = await getBooksRecursive(join(dir, entry.name), bookName);
+            books = books.concat(subBooks);
+        }
     }
-  }
-  return books;
+    return books;
 }
 
 export async function getNotes(book: string) {
@@ -213,7 +287,7 @@ export async function getNote(book: string, index: number) {
     const note = notes[index - 1];
     const bookPath = await getBookPath(book);
     const filePath = join(bookPath, note.filename);
-    
+
     return {
         ...note,
         path: filePath
@@ -247,19 +321,19 @@ export async function renameBook(oldName: string, newName: string) {
     const oldPath = await getBookPath(oldName);
     // getBookPath creates it if missing, but we want to know if it exists to rename
     if (!existsSync(oldPath)) {
-         throw new Error(`Book "${oldName}" does not exist`);
+        throw new Error(`Book "${oldName}" does not exist`);
     }
-    
+
     // We need to calculate new path manually to avoid 'mkdir' side effect of getBookPath on destination check?
     // Actually getBookPath is fine, it ensures parent exists.
     // But we need to construct the new path.
     const root = resolve(MNOTE_HOME); // MNOTE_HOME is module scope var
     const newPath = join(root, newName);
-    
+
     if (existsSync(newPath)) {
         throw new Error(`Book "${newName}" already exists`);
     }
-    
+
     await rename(oldPath, newPath);
     try {
         updateBookInDb(oldName, newName);
@@ -274,18 +348,18 @@ export function indexNote(book: string, filename: string, content: string, path:
     db.transaction(() => {
         if (existing) {
             db.query("UPDATE notes SET book = $book, filename = $filename, content = $content WHERE id = $id")
-              .run({ $book: book, $filename: filename, $content: content, $id: existing.id });
+                .run({ $book: book, $filename: filename, $content: content, $id: existing.id });
 
             db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: existing.id });
             db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
-              .run({ $id: existing.id, $book: book, $filename: filename, $path: path, $content: content });
+                .run({ $id: existing.id, $book: book, $filename: filename, $path: path, $content: content });
         } else {
             const result = db.query("INSERT INTO notes (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
-              .run({ $book: book, $filename: filename, $path: path, $content: content });
-            
+                .run({ $book: book, $filename: filename, $path: path, $content: content });
+
             const lastId = result.lastInsertRowid;
             db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
-              .run({ $id: lastId, $book: book, $filename: filename, $path: path, $content: content });
+                .run({ $id: lastId, $book: book, $filename: filename, $path: path, $content: content });
         }
     })();
 }
@@ -293,7 +367,7 @@ export function indexNote(book: string, filename: string, content: string, path:
 export function unindexNote(book: string, filename: string) {
     const db = getDB();
     const note = db.query("SELECT id FROM notes WHERE book = $book AND filename = $filename").get({ $book: book, $filename: filename }) as { id: number } | null;
-    
+
     if (note) {
         db.query("DELETE FROM notes WHERE id = $id").run({ $id: note.id });
         db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: note.id });
@@ -315,12 +389,12 @@ export function updateBookInDb(oldName: string, newName: string) {
 
             // Update notes table
             db.query("UPDATE notes SET book = $newBook, path = $newPath WHERE id = $id")
-              .run({ $newBook: newBook, $newPath: newPath, $id: note.id });
+                .run({ $newBook: newBook, $newPath: newPath, $id: note.id });
 
             // Update FTS table - delete and re-insert is easiest
             db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: note.id });
             db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
-              .run({ $id: note.id, $book: newBook, $filename: note.filename, $path: newPath, $content: note.content });
+                .run({ $id: note.id, $book: newBook, $filename: note.filename, $path: newPath, $content: note.content });
         }
     })();
 }
@@ -331,29 +405,75 @@ export interface SearchResult {
     content: string;
 }
 
-export async function findNotes(keyword: string, book?: string): Promise<SearchResult[]> {
+export async function findNotes(keyword: string, book?: string, tag?: string): Promise<SearchResult[]> {
     const dbPath = join(MNOTE_HOME, 'mnote.db');
     if (!existsSync(dbPath)) {
         console.error('Database not found. Rebuilding from notes...');
         try {
             await rebuildDB();
         } catch (e: any) {
-             console.error('Failed to rebuild database:', e.message);
-             return [];
+            console.error('Failed to rebuild database:', e.message);
+            return [];
         }
     }
 
+    // Logic for Tag Search (File System only for now as tags aren't in FTS)
+    if (tag) {
+        let results: SearchResult[] = [];
+        let booksToSearch: string[] = [];
+
+        if (book) {
+            booksToSearch = [book];
+        } else {
+            booksToSearch = await getBooksRecursive();
+        }
+
+        const lowerKeyword = keyword ? keyword.toLowerCase() : '';
+
+        for (const b of booksToSearch) {
+            try {
+                const notes = await getNotes(b);
+                for (const note of notes) {
+                    const parsed = matter(note.content);
+
+                    let matchesKeyword = true;
+                    if (lowerKeyword) {
+                        matchesKeyword = note.content.toLowerCase().includes(lowerKeyword);
+                    }
+
+                    let matchesTag = true;
+                    if (tag) {
+                        const noteTags = parsed.data.tags;
+                        if (!noteTags) {
+                            matchesTag = false;
+                        } else if (Array.isArray(noteTags)) {
+                            matchesTag = noteTags.includes(tag);
+                        } else {
+                            matchesTag = noteTags === tag;
+                        }
+                    }
+
+                    if (matchesKeyword && matchesTag) {
+                        results.push({
+                            book: b,
+                            filename: note.filename,
+                            content: note.content
+                        });
+                    }
+                }
+            } catch (error) {
+                // Ignore errors
+                continue;
+            }
+        }
+        return results;
+    }
+
+    // Logic for DB Search (Fast FTS) - used if no tag specified
     const db = getDB();
-    // Use FTS match. We treat the keyword as a phrase search or prefix search could be added.
-    // To support partial matches like "includes", FTS is limited. We'll use standard FTS match.
-    // We add * to allow prefix matching on the last word if it's not a phrase query.
 
     let matchQuery = keyword;
     if (!keyword.includes('"')) {
-        // Use prefix search on the last term or the whole query if it's a single word
-        // Simple approach: append * to allow prefix matching.
-        // If keyword is "data", "data*" matches "database".
-        // If keyword is "foo bar", "foo bar*" matches "foo" AND "bar...".
         matchQuery = `${keyword}*`;
     }
 
@@ -361,8 +481,8 @@ export async function findNotes(keyword: string, book?: string): Promise<SearchR
     let params: any = { $keyword: matchQuery };
 
     if (book) {
-         query = "SELECT book, filename, content FROM notes_fts WHERE notes_fts MATCH $keyword AND book = $book ORDER BY rank";
-         params = { $keyword: matchQuery, $book: book };
+        query = "SELECT book, filename, content FROM notes_fts WHERE notes_fts MATCH $keyword AND book = $book ORDER BY rank";
+        params = { $keyword: matchQuery, $book: book };
     }
 
     try {
@@ -438,7 +558,7 @@ export async function checkDB(): Promise<DBCheckResult> {
     for (const dbNote of dbNotes) {
         const key = `${dbNote.book}/${dbNote.filename}`;
         if (!diskSet.has(key)) {
-             missingOnDisk.push({ book: dbNote.book, filename: dbNote.filename });
+            missingOnDisk.push({ book: dbNote.book, filename: dbNote.filename });
         }
     }
 

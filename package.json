@@ -10,6 +10,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "commander": "^14.0.2"
+    "commander": "^14.0.2",
+    "gray-matter": "^4.0.3"
   }
 }
