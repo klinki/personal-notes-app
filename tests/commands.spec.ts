@@ -1,21 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { join } from "node:path";
-import { mkdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir } from "node:fs/promises";
+import { getTestDir, cleanupTestRoot } from './test_utils';
 
-const TEST_DIR = join(tmpdir(), `mnote-cli-test-${Date.now()}`);
 const CLI_PATH = join(process.cwd(), "src", "index.ts");
 const BUN_BIN = process.execPath; 
 
 // We need to pass MNOTE_HOME env var to the child process
 
 describe("CLI Commands", () => {
+    let TEST_DIR: string;
+
     beforeEach(async () => {
+        TEST_DIR = getTestDir('commands');
         await mkdir(TEST_DIR, { recursive: true });
     });
 
-    afterEach(async () => {
-        await rm(TEST_DIR, { recursive: true, force: true });
+    afterAll(async () => {
+        await cleanupTestRoot();
     });
 
     async function runCLI(args: string[], input = "") {

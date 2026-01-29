@@ -1,32 +1,30 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { join } from "node:path";
 import { mkdir, rm, exists } from "node:fs/promises";
-import { tmpdir } from "node:os";
 
-// Set MNOTE_HOME before importing store to ensure it picks up the env var
-const TEST_DIR = join(tmpdir(), `mnote-test-${Date.now()}`);
-process.env.MNOTE_HOME = TEST_DIR;
+import { getTestDir, cleanupTestRoot } from './test_utils';
 
 // Use let to hold the imported module
 let store: typeof import("../src/store");
+let TEST_DIR: string;
 
 describe("Store", () => {
     beforeEach(async () => {
+        TEST_DIR = getTestDir('store');
+        process.env.MNOTE_HOME = TEST_DIR;
+    
         // Dynamic import ensures env var is set before module loads
-        // Note: Bun/Node caches modules, so if it was imported elsewhere it might persist, 
-        // but typically in a single test file run it's fine. 
-        // Ideally we'd reset modules but ESM makes that hard.
-        // Assuming this is the first import in this process/context.
         store = await import("../src/store");
+        store.setDbLocation(TEST_DIR);
         await mkdir(TEST_DIR, { recursive: true });
     });
 
-    afterEach(async () => {
-        // Clean up
+    afterAll(async () => {
+        // Close all DB connections and clean up the entire test root once
         if (store && store.closeDB) {
              store.closeDB();
         }
-        await rm(TEST_DIR, { recursive: true, force: true });
+        await cleanupTestRoot();
     });
 
     it("should slugify text correctly", () => {

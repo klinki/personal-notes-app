@@ -1,20 +1,21 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterAll } from 'bun:test';
 import { join } from 'node:path';
-import { mkdir, rm, readFile, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { mkdir, rm } from 'node:fs/promises';
 import { setDbLocation, addNote, findNotes, updateNote, deleteNote, rebuildDB, checkDB, renameBook, getDB, closeDB } from '../src/store';
-
-const TEST_HOME = join(process.cwd(), 'test_mnote_home_' + Date.now());
+import { getTestDir, cleanupTestRoot } from './test_utils';
 
 describe('Database Integration', () => {
+    let TEST_HOME: string;
+
     beforeEach(async () => {
+        TEST_HOME = getTestDir('db_integration');
         await mkdir(TEST_HOME, { recursive: true });
         setDbLocation(TEST_HOME);
     });
 
-    afterEach(async () => {
+    afterAll(async () => {
         closeDB();
-        await rm(TEST_HOME, { recursive: true, force: true });
+        await cleanupTestRoot();
     });
 
     it('should index a note when added', async () => {
@@ -26,17 +27,18 @@ describe('Database Integration', () => {
     });
 
     it('should update index when note is updated', async () => {
-        await addNote('book1', 'Hello world');
-        const results = await findNotes('world');
+        await addNote('book1', 'Initial content', 'My Title');
+        const results = await findNotes('Initial');
+        expect(results.length).toBe(1);
         const filename = results[0].filename;
 
-        await updateNote('book1', filename, 'Hello database');
+        await updateNote('book1', filename, 'Updated content');
 
-        const results2 = await findNotes('database');
+        const results2 = await findNotes('Updated');
         expect(results2.length).toBe(1);
-        expect(results2[0].content).toBe('Hello database');
+        expect(results2[0].content).toBe('Updated content');
 
-        const results3 = await findNotes('world');
+        const results3 = await findNotes('Initial');
         expect(results3.length).toBe(0);
     });
 
