@@ -55,6 +55,14 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
     const noteDir = getDbInfo().path;
     const git = simpleGit(noteDir);
 
+    // Get git branch from config, default to 'master'
+    let branch = 'master';
+    try {
+        branch = await getConfig('git.branch') || 'master';
+    } catch {
+        // Config key doesn't exist, use default
+    }
+
     console.log(`Syncing notes in ${noteDir}...`);
 
     try {
@@ -77,7 +85,7 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
 
         console.log("Pulling changes from remote...");
         try {
-            await git.pull('origin', 'master', { '--rebase': 'true' });
+            await git.pull('origin', branch, { '--rebase': 'true' });
         } catch (e: any) {
             if (e.message && e.message.includes('CONFLICT')) {
                 console.error("❌ Sync conflict detected!");
@@ -88,7 +96,7 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
         }
 
         console.log("Pushing changes to remote...");
-        await git.push('origin', 'master');
+        await git.push('origin', branch);
 
         console.log("✅ Sync complete!");
 
@@ -107,3 +115,4 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
         throw e;
     }
 }
+
