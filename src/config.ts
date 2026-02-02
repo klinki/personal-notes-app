@@ -3,10 +3,17 @@ import { existsSync } from 'node:fs';
 import { getConfigPath } from './store';
 
 /**
+ * Configuration object type with string keys and unknown values.
+ */
+interface Config {
+    [key: string]: unknown;
+}
+
+/**
  * Loads the configuration from the config file.
  * @returns The parsed configuration object, or an empty object if no config exists
  */
-export async function loadConfig(): Promise<any> {
+export async function loadConfig(): Promise<Config> {
     const configPath = getConfigPath();
     if (!existsSync(configPath)) {
         return {};
@@ -25,12 +32,12 @@ export async function loadConfig(): Promise<any> {
  * Saves the configuration to the config file.
  * @param config - The configuration object to save
  */
-export async function saveConfig(config: any): Promise<void> {
+export async function saveConfig(config: Config): Promise<void> {
     const configPath = getConfigPath();
     await writeFile(configPath, JSON.stringify(config, null, 2));
 }
 
-function parseValue(value: string): any {
+function parseValue(value: string): unknown {
     try {
         return JSON.parse(value);
     } catch {
@@ -44,7 +51,7 @@ function parseValue(value: string): any {
  * @param value - The value to set (will be parsed as JSON if valid, otherwise stored as string)
  * @returns The updated full configuration object
  */
-export async function setConfig(keyPath: string, value: string): Promise<any> {
+export async function setConfig(keyPath: string, value: string): Promise<Config> {
     const config = await loadConfig();
     const keys = keyPath.split('.');
     let current = config;
@@ -55,7 +62,7 @@ export async function setConfig(keyPath: string, value: string): Promise<any> {
         if (!current[key] || typeof current[key] !== 'object') {
             current[key] = {};
         }
-        current = current[key];
+        current = current[key] as Config;
     }
 
     current[keys[keys.length - 1]] = parsedValue;
@@ -69,16 +76,16 @@ export async function setConfig(keyPath: string, value: string): Promise<any> {
  * @returns The configuration value
  * @throws Error if the key path is not found
  */
-export async function getConfig(keyPath: string): Promise<any> {
+export async function getConfig(keyPath: string): Promise<unknown> {
     const config = await loadConfig();
     const keys = keyPath.split('.');
-    let current = config;
+    let current: unknown = config;
 
     for (const key of keys) {
         if (current === undefined || current === null) {
              throw new Error(`Config key "${keyPath}" not found`);
         }
-        current = current[key];
+        current = (current as Config)[key];
     }
 
     if (current === undefined) {
