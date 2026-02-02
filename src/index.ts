@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo, getNote, updateNote, moveNote, renameBook, rebuildDB, checkDB, getTemplates, applyTemplate } from './store';
 import { openEditor } from './editor';
 import { getConfig, setConfig } from './config';
+import { syncNotes } from './commands/sync';
 
 const program = new Command();
 
@@ -262,6 +263,12 @@ dbCommand.command('check')
     } catch (e: any) {
       console.error('Error checking database:', e.message);
     }
+  });
+
+program.command('sync')
+  .description('Sync notes with remote repository')
+  .action(async () => {
+    await syncNotes();
   });
 
 const configCommand = program.command('config')

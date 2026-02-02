@@ -112,6 +112,27 @@ mnote find "important meeting"
 mnote find "project x" --book work
 ```
 
+### Sync Notes
+
+Synchronize your notes with a remote Git repository.
+
+```bash
+mnote sync
+```
+
+This command:
+1.  Commits local changes with a timestamp.
+2.  Pulls remote changes (using rebase).
+3.  Pushes local changes.
+
+**Note**: You must initialize the `mnote` directory as a Git repository and verify the remote origin is configured.
+
+```bash
+cd /path/to/mnote/db
+git init
+git remote add origin <url>
+```
+
 ### Check Database Location
 
 To see where your notes are currently stored and which configuration source is being used:
