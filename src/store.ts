@@ -84,9 +84,16 @@ function initDB(db: Database) {
             book TEXT NOT NULL,
             filename TEXT NOT NULL,
             path TEXT NOT NULL UNIQUE,
-            content TEXT
+            content TEXT,
+            tags TEXT
         );
     `);
+
+    try {
+        db.run("ALTER TABLE notes ADD COLUMN tags TEXT");
+    } catch (e) {
+        // Ignore error if column already exists
+    }
 
     const ftsExists = db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='notes_fts';").get();
     if (!ftsExists) {
@@ -94,6 +101,54 @@ function initDB(db: Database) {
         // but explicit updates are easier to debug in application logic sometimes.
         // Let's stick to the plan: separate table.
         db.run(`CREATE VIRTUAL TABLE notes_fts USING fts5(book, filename, path, content);`);
+    }
+}
+
+export function indexNote(book: string, filename: string, content: string, path: string) {
+    const db = getDB();
+    const existing = db.query("SELECT id FROM notes WHERE book = $book AND filename = $filename").get({ $book: book, $filename: filename }) as { id: number } | null;
+
+    // Extract tags
+    let tagsStr: string | null = null;
+    try {
+        const parsed = matter(content);
+        if (parsed.data.tags) {
+            const tags = Array.isArray(parsed.data.tags) ? parsed.data.tags : [parsed.data.tags]; // Handle single tag string
+            // Store as comma-separated with padding for easy LIKE search: ,tag1,tag2,
+            tagsStr = ',' + tags.map((t: any) => String(t).trim()).join(',') + ',';
+        }
+    } catch (e) {
+        // Ignore parsing errors
+    }
+
+    db.transaction(() => {
+        if (existing) {
+            db.query("UPDATE notes SET book = $book, filename = $filename, content = $content, tags = $tags WHERE id = $id")
+                .run({ $book: book, $filename: filename, $content: content, $tags: tagsStr, $id: existing.id });
+
+            db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: existing.id });
+            db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
+                .run({ $id: existing.id, $book: book, $filename: filename, $path: path, $content: content });
+        } else {
+            const result = db.query("INSERT INTO notes (book, filename, path, content, tags) VALUES ($book, $filename, $path, $content, $tags)")
+                .run({ $book: book, $filename: filename, $path: path, $content: content, $tags: tagsStr });
+
+            const lastId = result.lastInsertRowid;
+            db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
+                .run({ $id: lastId, $book: book, $filename: filename, $path: path, $content: content });
+        }
+    })();
+}
+
+export function unindexNote(book: string, filename: string) {
+    const db = getDB();
+    const existing = db.query("SELECT id FROM notes WHERE book = $book AND filename = $filename").get({ $book: book, $filename: filename }) as { id: number } | null;
+
+    if (existing) {
+        db.transaction(() => {
+            db.query("DELETE FROM notes WHERE id = $id").run({ $id: existing.id });
+            db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: existing.id });
+        })();
     }
 }
 
@@ -342,37 +397,7 @@ export async function renameBook(oldName: string, newName: string) {
     }
 }
 
-export function indexNote(book: string, filename: string, content: string, path: string) {
-    const db = getDB();
-    const existing = db.query("SELECT id FROM notes WHERE book = $book AND filename = $filename").get({ $book: book, $filename: filename }) as { id: number } | null;
-    db.transaction(() => {
-        if (existing) {
-            db.query("UPDATE notes SET book = $book, filename = $filename, content = $content WHERE id = $id")
-                .run({ $book: book, $filename: filename, $content: content, $id: existing.id });
 
-            db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: existing.id });
-            db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
-                .run({ $id: existing.id, $book: book, $filename: filename, $path: path, $content: content });
-        } else {
-            const result = db.query("INSERT INTO notes (book, filename, path, content) VALUES ($book, $filename, $path, $content)")
-                .run({ $book: book, $filename: filename, $path: path, $content: content });
-
-            const lastId = result.lastInsertRowid;
-            db.query("INSERT INTO notes_fts (rowid, book, filename, path, content) VALUES ($id, $book, $filename, $path, $content)")
-                .run({ $id: lastId, $book: book, $filename: filename, $path: path, $content: content });
-        }
-    })();
-}
-
-export function unindexNote(book: string, filename: string) {
-    const db = getDB();
-    const note = db.query("SELECT id FROM notes WHERE book = $book AND filename = $filename").get({ $book: book, $filename: filename }) as { id: number } | null;
-
-    if (note) {
-        db.query("DELETE FROM notes WHERE id = $id").run({ $id: note.id });
-        db.query("DELETE FROM notes_fts WHERE rowid = $id").run({ $id: note.id });
-    }
-}
 
 export function updateBookInDb(oldName: string, newName: string) {
     const db = getDB();
@@ -417,72 +442,56 @@ export async function findNotes(keyword: string, book?: string, tag?: string): P
         }
     }
 
-    // Logic for Tag Search (File System only for now as tags aren't in FTS)
-    if (tag) {
-        let results: SearchResult[] = [];
-        let booksToSearch: string[] = [];
-
-        if (book) {
-            booksToSearch = [book];
-        } else {
-            booksToSearch = await getBooksRecursive();
-        }
-
-        const lowerKeyword = keyword ? keyword.toLowerCase() : '';
-
-        for (const b of booksToSearch) {
-            try {
-                const notes = await getNotes(b);
-                for (const note of notes) {
-                    const parsed = matter(note.content);
-
-                    let matchesKeyword = true;
-                    if (lowerKeyword) {
-                        matchesKeyword = note.content.toLowerCase().includes(lowerKeyword);
-                    }
-
-                    let matchesTag = true;
-                    if (tag) {
-                        const noteTags = parsed.data.tags;
-                        if (!noteTags) {
-                            matchesTag = false;
-                        } else if (Array.isArray(noteTags)) {
-                            matchesTag = noteTags.includes(tag);
-                        } else {
-                            matchesTag = noteTags === tag;
-                        }
-                    }
-
-                    if (matchesKeyword && matchesTag) {
-                        results.push({
-                            book: b,
-                            filename: note.filename,
-                            content: note.content
-                        });
-                    }
-                }
-            } catch (error) {
-                // Ignore errors
-                continue;
-            }
-        }
-        return results;
-    }
-
-    // Logic for DB Search (Fast FTS) - used if no tag specified
     const db = getDB();
+    let query = "";
+    let params: any = {};
 
-    let matchQuery = keyword;
-    if (!keyword.includes('"')) {
-        matchQuery = `${keyword}*`;
-    }
+    if (tag) {
+        const tagPattern = `%,${tag},%`;
 
-    let query = "SELECT book, filename, content FROM notes_fts WHERE notes_fts MATCH $keyword ORDER BY rank";
-    let params: any = { $keyword: matchQuery };
-
-    if (book) {
-        query = "SELECT book, filename, content FROM notes_fts WHERE notes_fts MATCH $keyword AND book = $book ORDER BY rank";
-        params = { $keyword: matchQuery, $book: book };
+        if (keyword) {
+            let matchQuery = keyword;
+            if (!keyword.includes('"')) {
+                matchQuery = `${keyword}*`;
+            }
+            query = `
+                SELECT fts.book, fts.filename, fts.content 
+                FROM notes_fts fts
+                JOIN notes n ON fts.rowid = n.id
+                WHERE notes_fts MATCH $keyword 
+                AND n.tags LIKE $tagPattern
+             `;
+            params = { $keyword: matchQuery, $tagPattern: tagPattern };
+            if (book) {
+                query += " AND fts.book = $book";
+                params.$book = book;
+            }
+            query += " ORDER BY rank";
+        } else {
+            query = `
+                SELECT book, filename, content 
+                FROM notes 
+                WHERE tags LIKE $tagPattern
+             `;
+            params = { $tagPattern: tagPattern };
+            if (book) {
+                query += " AND book = $book";
+                params.$book = book;
+            }
+            query += " ORDER BY filename";
+        }
+    } else {
+        let matchQuery = keyword;
+        if (!keyword.includes('"')) {
+            matchQuery = `${keyword}*`;
+        }
+        query = "SELECT book, filename, content FROM notes_fts WHERE notes_fts MATCH $keyword";
+        params = { $keyword: matchQuery };
+        if (book) {
+            query += " AND book = $book";
+            params.$book = book;
+        }
+        query += " ORDER BY rank";
     }
 
     try {
