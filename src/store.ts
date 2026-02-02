@@ -279,7 +279,7 @@ export async function addNote(book: string, content: string, options: AddNoteOpt
 
     if (!finalTitle) {
         // Try to parse from first line of content
-        const firstLine = content.split('\n')[0].trim();
+        const firstLine = content.split('\n')?.[0]?.trim() ?? "";
         // Remove leading #, -, *, etc if it looks like a header or list item
         const cleanLine = firstLine.replace(/^[\s#\-\*]+/, '').trim();
         if (cleanLine.length > 0) {
@@ -404,7 +404,7 @@ export async function deleteNote(book: string, index: number) {
     if (index < 1 || index > notes.length) {
         throw new Error(`Invalid note index: ${index}`);
     }
-    const noteToDelete = notes[index - 1];
+    const noteToDelete = notes[index - 1]!;
     const bookPath = await getBookPath(book);
     const filePath = join(bookPath, noteToDelete.filename);
     await unlink(filePath);
@@ -428,7 +428,7 @@ export async function getNote(book: string, index: number) {
     if (index < 1 || index > notes.length) {
         throw new Error(`Invalid note index: ${index}`);
     }
-    const note = notes[index - 1];
+    const note = notes[index - 1]!;
     const bookPath = await getBookPath(book);
     const filePath = join(bookPath, note.filename);
 

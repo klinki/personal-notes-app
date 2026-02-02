@@ -58,14 +58,14 @@ export async function setConfig(keyPath: string, value: string): Promise<Config>
     const parsedValue = parseValue(value);
 
     for (let i = 0; i < keys.length - 1; i++) {
-        const key = keys[i];
+        const key = keys[i]!
         if (!current[key] || typeof current[key] !== 'object') {
             current[key] = {};
         }
         current = current[key] as Config;
     }
 
-    current[keys[keys.length - 1]] = parsedValue;
+    current[keys[keys.length - 1]!] = parsedValue;
     await saveConfig(config);
     return config;
 }

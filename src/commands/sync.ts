@@ -1,8 +1,6 @@
 import { simpleGit } from 'simple-git';
 import { getDbInfo } from '../store';
 import { getConfig } from '../config';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { LockManager } from '../lock';
 
 /**
@@ -75,7 +73,7 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
     // Get git branch from config, default to 'master'
     let branch = 'master';
     try {
-        branch = await getConfig('git.branch') || 'master';
+        branch = (await getConfig('git.branch')) as string | 'master';
     } catch {
         // Config key doesn't exist, use default
     }
