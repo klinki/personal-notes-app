@@ -4,6 +4,8 @@ import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNo
 import { openEditor } from './editor';
 import { getConfig, setConfig } from './config';
 import { syncNotes, autoSync } from './commands/sync';
+import { runDaemon } from './commands/daemon';
+import { installService, uninstallService } from './commands/service';
 
 const program = new Command();
 
@@ -157,6 +159,7 @@ program.command('edit')
 
       if (options.content) {
         // Update content inline
+        if (!note.filename) throw new Error('Note filename missing');
         await updateNote(book, note.filename, options.content);
         console.log(`Updated note ${index} in book "${book}".`);
         await autoSync();
@@ -172,6 +175,7 @@ program.command('edit')
       }
 
       if (newContent !== note.content) {
+        if (!note.filename) throw new Error('Note filename missing');
         await updateNote(book, note.filename, newContent);
         console.log(`Updated note ${index} in book "${book}".`);
         await autoSync();
@@ -277,6 +281,34 @@ program.command('sync')
   .action(async () => {
     await syncNotes();
   });
+
+// --- Background Sync Commands ---
+
+program.command('daemon')
+  .description('Run the sync daemon (foreground)')
+  .option('-i, --interval <seconds>', 'Sync interval in seconds', '60')
+  .action(async (options) => {
+    const interval = parseInt(options.interval, 10);
+    await runDaemon(interval);
+  });
+
+const serviceCommand = program.command('service')
+  .description('Manage background service');
+
+serviceCommand.command('install')
+  .description('Install mnote background service')
+  .option('-i, --interval <seconds>', 'Sync interval in seconds', '60')
+  .action(async (options) => {
+    const interval = parseInt(options.interval, 10);
+    await installService(interval);
+  });
+
+serviceCommand.command('uninstall')
+  .description('Uninstall mnote background service')
+  .action(async () => {
+    await uninstallService();
+  });
+
 
 const configCommand = program.command('config')
   .description('Configuration operations');

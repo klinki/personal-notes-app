@@ -108,3 +108,66 @@ It is simple, robust, and gives the user full control.
 - **Configuration**: New boolean key `autosync` (default: `false`).
 - **Triggers**: `add`, `edit`, `delete` commands.
 - **Behavior**: If enabled, runs `sync()` after successful operation. Errors in sync are logged but don't fail the operation.
+
+## 5. Background Synchronization (Proposed)
+
+To ensure notes are always up-to-date without manual intervention, especially when editing files directly via editor, we need a background synchronization mechanism.
+
+### Option A: Built-in Daemon (`mnote daemon`)
+Implement a command that runs indefinitely and syncs periodically.
+- **Pros**:
+    -   Cross-platform logic (TypeScript/Bun).
+    -   Simple to implement (`setInterval` + `syncNotes`).
+    -   No external dependencies or admin rights needed to *run*.
+- **Cons**:
+    -   User must keep the terminal open or use a process manager (like `tmux` or `systemd`) to keep it running.
+    -   Does not auto-start on boot unless configured externally.
+
+### Option B: Native OS Services
+Register `mnote` as a system service.
+- **Linux**: Systemd user service (`~/.config/systemd/user/mnote-sync.service`).
+- **macOS**: Launchd agent (`~/Library/LaunchAgents/com.mnote.sync.plist`).
+- **Windows**: Windows Service or Scheduled Task.
+- **Pros**:
+    -   "Set and forget".
+    -   Auto-starts on boot.
+    -   Resilient (OS restarts it if it crashes).
+- **Cons**:
+    -   Complex installation (requires generating platform-specific config files).
+    -   Harder to debug for the user.
+
+### Option C: Cron / Task Scheduler
+Run the existing `mnote sync` command periodically via OS scheduler.
+- **Linux/macOS**: `crontab -e` (`*/5 * * * * mnote sync`).
+- **Windows**: Task Scheduler.
+- **Pros**:
+    -   Efficient (not a long-running process).
+    -   Uses existing OS tools.
+- **Cons**:
+    -   High friction to set up for non-technical users.
+    -   Latency (syncs only every X minutes).
+
+### Recommendation
+**Hybrid Approach**:
+1.  Implement `mnote daemon` (Option A) as the core logic.
+    -   Accepts `--interval <seconds>`.
+2.  Provide a helper command `mnote service install` (Option B) that generates/registers the OS-specific configuration to run `mnote daemon` in the background.
+    -   This gives the best of both worlds: simple logic + robust system integration.
+
+## 6. Concurrency Control (Locking)
+To prevent conflicts between manual `mnote sync`, `autosync`, and the background daemon, we must implement a **Locking Mechanism**.
+
+### Strategy: File System Lock
+1.  **Lock File**: `.mnote-sync.lock` in the notes directory.
+2.  **Acquire**:
+    -   Before any sync operation (manual or background), try to create this file.
+    -   Write the current Process ID (PID) and timestamp into it.
+    -   If file exists:
+        -   Check if PID is still running (stale lock check). (Or simply check file age > 5 mins).
+        -   **Background Sync**: If locked, **SKIP** this run. Do not wait. Return immediately.
+        -   **Manual/Auto Sync**: Wait for X seconds (e.g., 5s), then fail if still locked with a "Sync in progress" message.
+3.  **Release**:
+    -   Delete the file upon success or error.
+    -   Use `finally` block to ensure cleanup.
+
+This ensures that `background sync` never interrupts a user editing session or a manual sync, and vice versa.

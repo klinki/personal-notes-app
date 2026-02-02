@@ -133,6 +133,40 @@ git init
 git remote add origin <url>
 ```
 
+### Auto Sync
+
+You can enable automatic synchronization after every change (`add`, `edit`, `delete`) by setting the `autosync` configuration:
+
+```bash
+mnote config set autosync true
+```
+
+When enabled, `mnote` will attempt to sync changes immediately. If the sync fails (e.g. network issue), it logs the error but does not stop the operation.
+
+### Background Service
+
+For a robust "set and forget" experience, you can install a background service that syncs your notes periodically (default: every 60 seconds).
+
+**Install Service:**
+```bash
+mnote service install --interval 60
+```
+*(Currently supported on Windows via Task Scheduler)*
+
+**Uninstall Service:**
+```bash
+mnote service uninstall
+```
+
+**Run Daemon Manually:**
+If you prefer not to install a system service, you can run the daemon directly in your terminal:
+```bash
+mnote daemon --interval 30
+```
+
+**Concurrency Control:**
+Both Auto Sync and the Background Service use a safe file-locking mechanism (`.mnote-sync.lock`) to prevent conflicts. If a sync is already in progress, other sync attempts will wait or skip.
+
 ### Check Database Location
 
 To see where your notes are currently stored and which configuration source is being used:

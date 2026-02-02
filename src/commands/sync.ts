@@ -3,9 +3,20 @@ import { getDbInfo } from '../store';
 import { getConfig } from '../config';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { LockManager } from '../lock';
 
 export async function syncNotes() {
-    await syncNotesInternal({ exitOnError: true });
+    const lock = new LockManager();
+    const acquired = await lock.acquire({ wait: true, timeoutMs: 5000 });
+    if (!acquired) {
+        console.error("❌ Could not acquire sync lock. Another sync is in progress.");
+        process.exit(1);
+    }
+    try {
+        await performSync({ exitOnError: true });
+    } finally {
+        await lock.release();
+    }
 }
 
 export async function autoSync() {
@@ -13,24 +24,34 @@ export async function autoSync() {
         const enabled = await getConfig('autosync');
         if (enabled === true || enabled === 'true') {
             console.log("🔄 Auto-syncing...");
+
+            const lock = new LockManager();
+            // Auto-sync should wait briefly, but fail silently/log if busy
+            const acquired = await lock.acquire({ wait: true, timeoutMs: 3000 });
+
+            if (!acquired) {
+                console.log("⚠️ Sync lock busy, skipping auto-sync.");
+                return;
+            }
+
             try {
-                await syncNotesInternal({ exitOnError: false });
+                await performSync({ exitOnError: false });
             } catch (e: any) {
-                // Already logged in syncNotesInternal
+                // Already logged in performSync
+            } finally {
+                await lock.release();
             }
         }
     } catch (e) {
-        // Config key might not exist, strictly speaking getConfig throws if not found
-        // which means disabled by default if not set.
-        // We should handle 'key not found' as 'disabled', effectively ignoring error.
+        // Config key might not exist warning ignored
     }
 }
 
-interface SyncOptions {
+export interface SyncOptions {
     exitOnError?: boolean;
 }
 
-async function syncNotesInternal(options: SyncOptions = { exitOnError: true }) {
+export async function performSync(options: SyncOptions = { exitOnError: true }) {
     const noteDir = getDbInfo().path;
     const git = simpleGit(noteDir);
 
