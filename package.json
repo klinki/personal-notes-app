@@ -15,5 +15,6 @@
   "dependencies": {
     "commander": "^14.0.2",
     "gray-matter": "^4.0.3"
-  }
+  },
+  "version": "1.0.0"
 }
