@@ -20,6 +20,9 @@ Follow these steps:
    ```
 
 2. Commit with the message and the footer. Ensure there is a blank line between the subject and the footer.
+   **Guidelines:**
+   - **Subject Line:** Max 50 characters. Capitalize the subject line. Do not end with a period.
+   - **Body/Footer:** Max 72 characters per line. Wrap text if necessary.
 
    **Allowed Types:**
    - `feat`: A new feature
