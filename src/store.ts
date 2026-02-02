@@ -13,11 +13,19 @@ if (process.env.MNOTE_HOME) {
     LOCATION_SOURCE = 'MNOTE_HOME environment variable';
 }
 
+/**
+ * Sets the database location path.
+ * @param path - The new path for the database directory
+ */
 export function setDbLocation(path: string) {
     MNOTE_HOME = resolve(path);
     LOCATION_SOURCE = '--dbLocation flag';
 }
 
+/**
+ * Gets information about the current database location.
+ * @returns An object containing the resolved path and the source of the location setting
+ */
 export function getDbInfo() {
     return {
         path: resolve(MNOTE_HOME),
@@ -25,10 +33,19 @@ export function getDbInfo() {
     };
 }
 
+/**
+ * Gets the path to the configuration file.
+ * @returns The absolute path to config.json
+ */
 export function getConfigPath() {
     return join(MNOTE_HOME, 'config.json');
 }
 
+/**
+ * Converts text to a URL-friendly slug.
+ * @param text - The text to slugify
+ * @returns A slugified version of the text
+ */
 export function slugify(text: string): string {
     return text
         .normalize('NFD')
@@ -44,6 +61,10 @@ export function slugify(text: string): string {
 let dbInstance: Database | null = null;
 let dbInstancePath: string | null = null;
 
+/**
+ * Gets the database instance, creating it if necessary.
+ * @returns The SQLite database instance
+ */
 export function getDB() {
     const dbPath = join(MNOTE_HOME, 'mnote.db');
 
@@ -69,6 +90,9 @@ export function getDB() {
     return dbInstance;
 }
 
+/**
+ * Closes the database connection.
+ */
 export function closeDB() {
     if (dbInstance) {
         dbInstance.close();
@@ -104,6 +128,13 @@ function initDB(db: Database) {
     }
 }
 
+/**
+ * Indexes a note in the database for full-text search.
+ * @param book - The book (folder) name containing the note
+ * @param filename - The filename of the note
+ * @param content - The content of the note
+ * @param path - The full filesystem path to the note
+ */
 export function indexNote(book: string, filename: string, content: string, path: string) {
     const db = getDB();
     const existing = db.query("SELECT id FROM notes WHERE book = $book AND filename = $filename").get({ $book: book, $filename: filename }) as { id: number } | null;
@@ -140,6 +171,11 @@ export function indexNote(book: string, filename: string, content: string, path:
     })();
 }
 
+/**
+ * Removes a note from the search index.
+ * @param book - The book (folder) name containing the note
+ * @param filename - The filename of the note to unindex
+ */
 export function unindexNote(book: string, filename: string) {
     const db = getDB();
     const existing = db.query("SELECT id FROM notes WHERE book = $book AND filename = $filename").get({ $book: book, $filename: filename }) as { id: number } | null;
@@ -152,6 +188,12 @@ export function unindexNote(book: string, filename: string) {
     }
 }
 
+/**
+ * Gets the filesystem path for a book, creating the directory if it doesn't exist.
+ * @param book - The name of the book (can be nested like "folder/subfolder")
+ * @returns The absolute path to the book directory
+ * @throws Error if the book name attempts to traverse outside the home directory
+ */
 export async function getBookPath(book: string) {
     const resolvedHome = resolve(MNOTE_HOME);
     const path = resolve(resolvedHome, book);
@@ -166,6 +208,10 @@ export async function getBookPath(book: string) {
     return path;
 }
 
+/**
+ * Gets a list of available templates.
+ * @returns An array of template filenames (without path)
+ */
 export async function getTemplates() {
     const templatesDir = join(MNOTE_HOME, '.foam', 'templates');
     if (!existsSync(templatesDir)) {
@@ -177,6 +223,12 @@ export async function getTemplates() {
         .map(e => e.name);
 }
 
+/**
+ * Applies a template by reading it and substituting variables.
+ * @param templateName - The name of the template file (without path)
+ * @returns The template content with variables substituted
+ * @throws Error if the template is not found
+ */
 export async function applyTemplate(templateName: string) {
     const templatePath = join(MNOTE_HOME, '.foam', 'templates', templateName);
     if (!existsSync(templatePath)) {
@@ -202,12 +254,24 @@ export async function applyTemplate(templateName: string) {
     return content;
 }
 
+/**
+ * Options for adding a note.
+ */
 export interface AddNoteOptions {
+    /** The template name to use */
     template?: string;
+    /** Array of tags to add to the note */
     tags?: string[];
+    /** The title of the note */
     title?: string;
 }
 
+/**
+ * Adds a new note to a book.
+ * @param book - The book (folder) name to add the note to
+ * @param content - The content of the note
+ * @param options - Optional settings for the note
+ */
 export async function addNote(book: string, content: string, options: AddNoteOptions = {}) {
     const bookPath = await getBookPath(book);
 
@@ -283,6 +347,12 @@ export async function addNote(book: string, content: string, options: AddNoteOpt
     console.log(`Note saved to ${filePath}`);
 }
 
+/**
+ * Recursively gets all books (subdirectories) under the notes directory.
+ * @param dir - The directory to search in (defaults to MNOTE_HOME)
+ * @param parent - The parent path prefix for nested books
+ * @returns An array of book names (with nested paths like "parent/child")
+ */
 export async function getBooksRecursive(dir = MNOTE_HOME, parent = ''): Promise<string[]> {
     if (!existsSync(dir)) return [];
 
@@ -301,6 +371,11 @@ export async function getBooksRecursive(dir = MNOTE_HOME, parent = ''): Promise<
     return books;
 }
 
+/**
+ * Gets all notes in a book.
+ * @param book - The book (folder) name
+ * @returns An array of notes with filename and content
+ */
 export async function getNotes(book: string) {
     const bookPath = join(MNOTE_HOME, book);
     if (!existsSync(bookPath)) {
@@ -317,6 +392,13 @@ export async function getNotes(book: string) {
     return notes.sort((a, b) => a.filename.localeCompare(b.filename));
 }
 
+/**
+ * Deletes a note from a book.
+ * @param book - The book (folder) name
+ * @param index - The 1-based index of the note to delete
+ * @returns The filename of the deleted note
+ * @throws Error if the index is invalid
+ */
 export async function deleteNote(book: string, index: number) {
     const notes = await getNotes(book);
     if (index < 1 || index > notes.length) {
@@ -334,6 +416,13 @@ export async function deleteNote(book: string, index: number) {
     return noteToDelete.filename;
 }
 
+/**
+ * Gets a specific note by index.
+ * @param book - The book (folder) name
+ * @param index - The 1-based index of the note
+ * @returns The note object with filename, content, and path
+ * @throws Error if the index is invalid
+ */
 export async function getNote(book: string, index: number) {
     const notes = await getNotes(book);
     if (index < 1 || index > notes.length) {
@@ -349,6 +438,12 @@ export async function getNote(book: string, index: number) {
     };
 }
 
+/**
+ * Updates the content of an existing note.
+ * @param book - The book (folder) name
+ * @param filename - The filename of the note to update
+ * @param content - The new content
+ */
 export async function updateNote(book: string, filename: string, content: string) {
     const bookPath = await getBookPath(book);
     const filePath = join(bookPath, filename);
@@ -360,6 +455,12 @@ export async function updateNote(book: string, filename: string, content: string
     }
 }
 
+/**
+ * Moves a note from one book to another.
+ * @param book - The source book (folder) name
+ * @param index - The 1-based index of the note to move
+ * @param targetBook - The destination book (folder) name
+ */
 export async function moveNote(book: string, index: number, targetBook: string) {
     const note = await getNote(book, index);
     // Add to new book (this handles timestamp collision automatically in addNote logic, 
@@ -372,6 +473,12 @@ export async function moveNote(book: string, index: number, targetBook: string) 
     await deleteNote(book, index);
 }
 
+/**
+ * Renames a book (folder).
+ * @param oldName - The current name of the book
+ * @param newName - The new name for the book
+ * @throws Error if the book doesn't exist or new name already exists
+ */
 export async function renameBook(oldName: string, newName: string) {
     const oldPath = await getBookPath(oldName);
     // getBookPath creates it if missing, but we want to know if it exists to rename
@@ -399,6 +506,11 @@ export async function renameBook(oldName: string, newName: string) {
 
 
 
+/**
+ * Updates book names in the database after a rename operation.
+ * @param oldName - The old book name
+ * @param newName - The new book name
+ */
 export function updateBookInDb(oldName: string, newName: string) {
     const db = getDB();
     const notes = db.query("SELECT * FROM notes WHERE book = $oldName OR book LIKE $oldNameLike")
@@ -424,12 +536,25 @@ export function updateBookInDb(oldName: string, newName: string) {
     })();
 }
 
+/**
+ * Represents a search result containing note metadata and content.
+ */
 export interface SearchResult {
+    /** The book (folder) name */
     book: string;
+    /** The filename of the note */
     filename: string;
+    /** The content of the note */
     content: string;
 }
 
+/**
+ * Finds notes matching keywords and optional filters.
+ * @param keyword - The search keyword(s)
+ * @param book - Optional book name to search within
+ * @param tag - Optional tag to filter by
+ * @returns An array of matching search results
+ */
 export async function findNotes(keyword: string, book?: string, tag?: string): Promise<SearchResult[]> {
     const dbPath = join(MNOTE_HOME, 'mnote.db');
     if (!existsSync(dbPath)) {
@@ -503,6 +628,9 @@ export async function findNotes(keyword: string, book?: string, tag?: string): P
     }
 }
 
+/**
+ * Rebuilds the search index from all markdown files.
+ */
 export async function rebuildDB() {
     const db = getDB();
     // Clear tables
@@ -532,12 +660,22 @@ export async function rebuildDB() {
     console.log(`Rebuild complete. Indexed ${count} notes.`);
 }
 
+/**
+ * Result of a database consistency check.
+ */
 export interface DBCheckResult {
+    /** Whether the database is consistent with the filesystem */
     status: 'consistent' | 'inconsistent';
+    /** Files present on disk but missing from the database */
     missingOnDisk: { book: string, filename: string }[];
+    /** Files present in the database but missing from disk */
     missingInDB: { book: string, filename: string }[];
 }
 
+/**
+ * Checks database consistency against the filesystem.
+ * @returns A DBCheckResult with status and any inconsistencies found
+ */
 export async function checkDB(): Promise<DBCheckResult> {
     const db = getDB();
     const dbNotes = db.query("SELECT book, filename, path FROM notes").all() as { book: string, filename: string, path: string }[];

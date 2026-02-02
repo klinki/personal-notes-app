@@ -6,6 +6,11 @@ import { promisify } from 'node:util';
 const execAsync = promisify(exec);
 const TASK_NAME = 'mnote-background-sync';
 
+/**
+ * Installs the mnote background service for automatic syncing.
+ * Currently supports Windows via schtasks.
+ * @param interval - The sync interval in seconds
+ */
 export async function installService(interval: number) {
     const os = platform();
     const dbPath = getDbInfo().path;
@@ -23,6 +28,10 @@ export async function installService(interval: number) {
     }
 }
 
+/**
+ * Uninstalls the mnote background service.
+ * Currently supports Windows via schtasks.
+ */
 export async function uninstallService() {
     const os = platform();
     if (os === 'win32') {
@@ -32,6 +41,12 @@ export async function uninstallService() {
     }
 }
 
+/**
+ * Generates the command to run the daemon with proper arguments.
+ * @param interval - The sync interval in seconds
+ * @param dbPath - The database path
+ * @returns The command string to execute
+ */
 function getCommandToRun(interval: number, dbPath: string): string {
     // Check if running as script (ts/js) or compiled binary
     if (process.argv[1] && (process.argv[1].endsWith('.ts') || process.argv[1].endsWith('.js'))) {
@@ -42,6 +57,10 @@ function getCommandToRun(interval: number, dbPath: string): string {
     }
 }
 
+/**
+ * Installs the Windows service task using schtasks.
+ * @param commandToRun - The command to execute for the daemon
+ */
 async function installWindowsService(commandToRun: string) {
     try {
         // /SC ONLOGON: Runs when user logs in
@@ -62,6 +81,9 @@ async function installWindowsService(commandToRun: string) {
     }
 }
 
+/**
+ * Uninstalls the Windows service task using schtasks.
+ */
 async function uninstallWindowsService() {
     try {
         await execAsync(`schtasks /Delete /TN "${TASK_NAME}" /F`);

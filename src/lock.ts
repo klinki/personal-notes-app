@@ -3,6 +3,10 @@ import { existsSync } from 'node:fs';
 import { writeFile, readFile, unlink } from 'node:fs/promises';
 import { getDbInfo } from './store';
 
+/**
+ * Manages file-based locking for synchronization operations.
+ * Prevents concurrent sync operations from running simultaneously.
+ */
 export class LockManager {
     private lockFile: string;
 
@@ -13,7 +17,7 @@ export class LockManager {
     /**
      * Tries to acquire the lock.
      * @param options.wait - If true, waits/retries for a few seconds before failing.
-     * @param options.timeoutMs - Total time to wait if wait is true.
+     * @param options.timeoutMs - Total time to wait if wait is true (default: 5000ms).
      * @returns true if acquired, false otherwise.
      */
     async acquire(options: { wait?: boolean, timeoutMs?: number } = {}): Promise<boolean> {
@@ -93,6 +97,9 @@ export class LockManager {
         }
     }
 
+    /**
+     * Releases the lock if we own it.
+     */
     async release() {
         try {
             if (existsSync(this.lockFile)) {

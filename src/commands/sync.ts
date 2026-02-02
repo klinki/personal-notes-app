@@ -5,6 +5,10 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { LockManager } from '../lock';
 
+/**
+ * Performs a full sync of notes with the remote git repository.
+ * Acquires a lock and performs the sync operation.
+ */
 export async function syncNotes() {
     const lock = new LockManager();
     const acquired = await lock.acquire({ wait: true, timeoutMs: 5000 });
@@ -19,6 +23,10 @@ export async function syncNotes() {
     }
 }
 
+/**
+ * Automatically syncs notes if autosync is enabled in the configuration.
+ * Silently skips if the sync lock is busy.
+ */
 export async function autoSync() {
     try {
         const enabled = await getConfig('autosync');
@@ -47,10 +55,19 @@ export async function autoSync() {
     }
 }
 
+/**
+ * Options for the performSync function.
+ */
 export interface SyncOptions {
+    /** Whether to exit the process on error (default: true) */
     exitOnError?: boolean;
 }
 
+/**
+ * Performs the actual synchronization operations.
+ * Commits local changes, pulls from remote, and pushes to remote.
+ * @param options - Sync options configuration
+ */
 export async function performSync(options: SyncOptions = { exitOnError: true }) {
     const noteDir = getDbInfo().path;
     const git = simpleGit(noteDir);

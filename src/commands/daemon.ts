@@ -1,6 +1,11 @@
 import { LockManager } from '../lock';
 import { performSync } from './sync';
 
+/**
+ * Runs the sync daemon in the foreground.
+ * Performs periodic sync operations at the specified interval.
+ * @param intervalSeconds - The interval in seconds between sync operations
+ */
 export async function runDaemon(intervalSeconds: number) {
     console.log(`Starting mnote daemon (interval: ${intervalSeconds}s)...`);
     console.log(`Press Ctrl+C to stop.`);

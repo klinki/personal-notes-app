@@ -4,6 +4,12 @@ import { join } from 'node:path';
 import { writeFile, readFile, unlink } from 'node:fs/promises';
 import { getEditorConfig } from './config';
 
+/**
+ * Opens the default editor for note editing.
+ * Falls back to terminal input if the editor fails to open.
+ * @param initialContent - Optional initial content to populate the editor with
+ * @returns The edited content, or null if the content is empty or unchanged
+ */
 export async function openEditor(initialContent = ''): Promise<string | null> {
   const editor = await getEditorConfig();
   const tmpPath = join(tmpdir(), `mnote-edit-${Date.now()}.md`);
@@ -47,6 +53,11 @@ export async function openEditor(initialContent = ''): Promise<string | null> {
   }
 }
 
+/**
+ * Reads input from the terminal.
+ * @param initialContent - Optional initial content to display
+ * @returns The input content, or null if empty
+ */
 export async function readFromTerminal(initialContent: string): Promise<string | null> {
   const { createInterface } = await import('node:readline');
   

@@ -2,6 +2,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { getConfigPath } from './store';
 
+/**
+ * Loads the configuration from the config file.
+ * @returns The parsed configuration object, or an empty object if no config exists
+ */
 export async function loadConfig(): Promise<any> {
     const configPath = getConfigPath();
     if (!existsSync(configPath)) {
@@ -17,6 +21,10 @@ export async function loadConfig(): Promise<any> {
     }
 }
 
+/**
+ * Saves the configuration to the config file.
+ * @param config - The configuration object to save
+ */
 export async function saveConfig(config: any): Promise<void> {
     const configPath = getConfigPath();
     await writeFile(configPath, JSON.stringify(config, null, 2));
@@ -30,6 +38,12 @@ function parseValue(value: string): any {
     }
 }
 
+/**
+ * Sets a configuration value using dot-notation key path.
+ * @param keyPath - The configuration key path (e.g., 'editor' or 'git.branch')
+ * @param value - The value to set (will be parsed as JSON if valid, otherwise stored as string)
+ * @returns The updated full configuration object
+ */
 export async function setConfig(keyPath: string, value: string): Promise<any> {
     const config = await loadConfig();
     const keys = keyPath.split('.');
@@ -49,6 +63,12 @@ export async function setConfig(keyPath: string, value: string): Promise<any> {
     return config;
 }
 
+/**
+ * Gets a configuration value using dot-notation key path.
+ * @param keyPath - The configuration key path (e.g., 'editor' or 'git.branch')
+ * @returns The configuration value
+ * @throws Error if the key path is not found
+ */
 export async function getConfig(keyPath: string): Promise<any> {
     const config = await loadConfig();
     const keys = keyPath.split('.');
@@ -68,6 +88,10 @@ export async function getConfig(keyPath: string): Promise<any> {
     return current;
 }
 
+/**
+ * Gets the editor command from environment, config, or default.
+ * @returns The editor command string
+ */
 export async function getEditorConfig(): Promise<string> {
     // 1. Env
     if (process.env.EDITOR) {
