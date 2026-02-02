@@ -27,7 +27,7 @@ describe('Database Integration', () => {
     });
 
     it('should update index when note is updated', async () => {
-        await addNote('book1', 'Initial content', 'My Title');
+        await addNote('book1', 'Initial content', { title: 'My Title' });
         const results = await findNotes('Initial');
         expect(results.length).toBe(1);
         const filename = results[0].filename;

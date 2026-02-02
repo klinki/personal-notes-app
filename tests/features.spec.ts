@@ -1,23 +1,26 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { join } from "node:path";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
+import { getTestDir, cleanupTestRoot } from './test_utils';
 import matter from "gray-matter";
 
-const TEST_DIR = join(tmpdir(), `mnote-features-test-${Date.now()}`);
-process.env.MNOTE_HOME = TEST_DIR;
-
-let store: typeof import("../src/store");
-
 describe("Features (Tags & Templates)", () => {
+    let TEST_DIR: string;
+    let store: typeof import("../src/store");
+
     beforeEach(async () => {
+        TEST_DIR = getTestDir('features');
+        process.env.MNOTE_HOME = TEST_DIR;
         await mkdir(TEST_DIR, { recursive: true });
         store = await import("../src/store");
         store.setDbLocation(TEST_DIR);
     });
 
-    afterEach(async () => {
-        await rm(TEST_DIR, { recursive: true, force: true });
+    afterAll(async () => {
+        if (store && store.closeDB) {
+            store.closeDB();
+        }
+        await cleanupTestRoot();
     });
 
     it("should list templates", async () => {
@@ -126,11 +129,11 @@ Body`;
     });
 
     it("should find notes by tag AND keyword", async () => {
-         await store.addNote("mix-search", "important update", { tags: ["work"] });
-         await store.addNote("mix-search", "boring update", { tags: ["work"] });
+        await store.addNote("mix-search", "important update", { tags: ["work"] });
+        await store.addNote("mix-search", "boring update", { tags: ["work"] });
 
-         const results = await store.findNotes("important", undefined, "work");
-         expect(results).toHaveLength(1);
-         expect(results[0].content).toContain("important update");
+        const results = await store.findNotes("important", undefined, "work");
+        expect(results).toHaveLength(1);
+        expect(results[0].content).toContain("important update");
     });
 });

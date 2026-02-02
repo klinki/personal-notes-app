@@ -58,7 +58,7 @@ describe("Store", () => {
         const bookName = "titled-notes";
         const content = "Some content";
         const title = "My Special Note";
-        await store.addNote(bookName, content, title);
+        await store.addNote(bookName, content, { title });
 
         const notes = await store.getNotes(bookName);
         expect(notes).toHaveLength(1);
@@ -89,9 +89,9 @@ describe("Store", () => {
         const bookName = "collision-test";
         const title = "Same Title";
 
-        await store.addNote(bookName, "content 1", title);
-        await store.addNote(bookName, "content 2", title);
-        await store.addNote(bookName, "content 3", title);
+        await store.addNote(bookName, "content 1", { title });
+        await store.addNote(bookName, "content 2", { title });
+        await store.addNote(bookName, "content 3", { title });
 
         const notes = await store.getNotes(bookName);
         expect(notes).toHaveLength(3);
