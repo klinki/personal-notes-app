@@ -3,7 +3,8 @@
   "module": "src/index.ts",
   "type": "module",
   "scripts": {
-    "build": "bun build ./src/index.ts --compile --outfile mnote"
+    "build": "bun build ./src/index.ts --compile --outfile mnote",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",
