@@ -103,3 +103,8 @@ It is simple, robust, and gives the user full control.
 1.  Add `simple-git` dependency (wrapper for running git commands).
 2.  Implement `sync` command.
 3.  Add `init-sync` command to help setup the remote.
+
+## 4. Autosync (Planned)
+- **Configuration**: New boolean key `autosync` (default: `false`).
+- **Triggers**: `add`, `edit`, `delete` commands.
+- **Behavior**: If enabled, runs `sync()` after successful operation. Errors in sync are logged but don't fail the operation.

@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 import { addNote, getNotes, getBooksRecursive, setDbLocation, deleteNote, findNotes, getDbInfo, getNote, updateNote, moveNote, renameBook, rebuildDB, checkDB, getTemplates, applyTemplate } from './store';
 import { openEditor } from './editor';
 import { getConfig, setConfig } from './config';
-import { syncNotes } from './commands/sync';
+import { syncNotes, autoSync } from './commands/sync';
 
 const program = new Command();
 
@@ -45,8 +45,10 @@ program.command('add')
           await addNote(book, editorContent, { title: options.title, tags });
         } else {
           console.log('Empty note, not saved.');
+          return;
         }
       }
+      await autoSync();
     } catch (e: any) {
       console.error('Error adding note:', e.message);
     }
@@ -106,6 +108,7 @@ program.command('delete')
 
       const deletedFile = await deleteNote(book, parseInt(index));
       console.log(`Deleted note: ${deletedFile}`);
+      await autoSync();
     } catch (e: any) {
       console.error('Error deleting note:', e.message);
     }
@@ -127,6 +130,7 @@ program.command('edit')
         if (options.name) {
           await renameBook(book, options.name);
           console.log(`Renamed book "${book}" to "${options.name}".`);
+          await autoSync();
           return;
         } else {
           console.error('Error: index argument required for note editing, or -n option for book renaming.');
@@ -145,6 +149,7 @@ program.command('edit')
         // Move Note
         await moveNote(book, index, options.book);
         console.log(`Moved note ${index} from "${book}" to "${options.book}".`);
+        await autoSync();
         return;
       }
 
@@ -154,6 +159,7 @@ program.command('edit')
         // Update content inline
         await updateNote(book, note.filename, options.content);
         console.log(`Updated note ${index} in book "${book}".`);
+        await autoSync();
         return;
       }
 
@@ -168,6 +174,7 @@ program.command('edit')
       if (newContent !== note.content) {
         await updateNote(book, note.filename, newContent);
         console.log(`Updated note ${index} in book "${book}".`);
+        await autoSync();
       } else {
         console.log('No changes made.');
       }
