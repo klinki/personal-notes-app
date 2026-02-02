@@ -7,8 +7,16 @@ When you are asked to commit changes, you MUST always include the `Co-authored-b
 Follow these steps:
 
 1. Stage your changes:
+   
+   > [!IMPORTANT]
+   > **Do not commit unrelated files.**
+   > - Avoid committing build artifacts (e.g. `dist/`, `mnote.exe`), dependencies (`node_modules`), or temporary files.
+   > - If you see these files in `git status`, add them to `.gitignore` before proceeding.
+   > - Prefer staging specific files over `git add .` to ensure only intended changes are included.
+
    ```powershell
-   git add .
+   git status
+   git add <path/to/file>
    ```
 
 2. Commit with the message and the footer. Ensure there is a blank line between the subject and the footer.
