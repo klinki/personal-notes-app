@@ -1,0 +1,32 @@
+name: Release Build
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    name: Build and Upload Binary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+      
+      - name: Install dependencies
+        run: bun install
+        
+      - name: Build Binary
+        run: bun run build
+        
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v1
+        with:
+          files: mnote
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
