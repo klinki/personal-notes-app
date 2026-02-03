@@ -42,3 +42,5 @@ Thumbs.db
 *.exe
 mnote
 test-db/
+junit_result*.xml
+test-results.xml

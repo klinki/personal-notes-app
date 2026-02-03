@@ -2,6 +2,9 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+// Disable git prompts for all tests to prevent hangs
+process.env.GIT_TERMINAL_PROMPT = '0';
+
 // Shared root for all tests - created once per test run
 const TEST_ROOT = join(tmpdir(), `mnote-tests-${Date.now()}`);
 

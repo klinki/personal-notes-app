@@ -6,7 +6,7 @@ import { performSync, syncNotes, autoSync, type SyncOptions } from '../src/comma
 import { runDaemon } from '../src/commands/daemon';
 import { setDbLocation } from '../src/store';
 import { simpleGit } from 'simple-git';
-import { getTestDir, cleanupTestRoot, cleanupDir } from './test_utils';
+import { getTestDir, cleanupTestRoot } from './test_utils';
 
 describe('LockManager', () => {
     let testDir: string;
@@ -15,10 +15,6 @@ describe('LockManager', () => {
         testDir = getTestDir('lock');
         mkdirSync(testDir, { recursive: true });
         setDbLocation(testDir);
-    });
-
-    afterEach(async () => {
-        await cleanupDir(testDir);
     });
 
     afterAll(async () => {
@@ -61,9 +57,7 @@ describe('LockManager Edge Cases', () => {
         setDbLocation(testDir);
     });
 
-    afterEach(async () => {
-        await cleanupDir(testDir);
-    });
+
 
     afterAll(async () => {
         await cleanupTestRoot();
@@ -82,10 +76,14 @@ describe('LockManager Edge Cases', () => {
     it('should handle rapid acquire/release cycles', async () => {
         const lock = new LockManager();
         for (let i = 0; i < 5; i++) {
-            await lock.acquire();
+            const acquired = await lock.acquire();
+            expect(acquired).toBe(true);
             await lock.release();
         }
-        expect(true).toBe(true);
+
+        // Verify lock is released after cycles
+        const finalAcquire = await lock.acquire();
+        expect(finalAcquire).toBe(true);
     });
 
     it('should handle lock timeout correctly', async () => {
@@ -109,10 +107,6 @@ describe('Sync Module', () => {
         testDir = getTestDir('sync');
         mkdirSync(testDir, { recursive: true });
         setDbLocation(testDir);
-    });
-
-    afterEach(async () => {
-        await cleanupDir(testDir);
     });
 
     afterAll(async () => {
@@ -165,6 +159,13 @@ describe('Sync Module', () => {
             expect(e.message).toBeDefined();
         }
     });
+
+    it('should return early if no remote configured', async () => {
+        const git = simpleGit(testDir);
+        await git.init();
+        const result = await performSync({ exitOnError: false });
+        expect(result).toBeUndefined(); // Should return, not throw
+    });
 });
 
 describe('AutoSync', () => {
@@ -176,17 +177,17 @@ describe('AutoSync', () => {
         setDbLocation(testDir);
     });
 
-    afterEach(async () => {
-        await cleanupDir(testDir);
-    });
-
     afterAll(async () => {
         await cleanupTestRoot();
     });
 
     it('should execute autoSync without errors', async () => {
-        const result = autoSync();
-        await expect(result).resolves.not.toThrow();
+        try {
+            await autoSync();
+        } catch (e) {
+            console.error('AutoSync failed with:', e);
+            throw e;
+        }
     });
 });
 
@@ -197,10 +198,6 @@ describe('CLI Sync Commands', () => {
         testDir = getTestDir('cli-sync');
         mkdirSync(testDir, { recursive: true });
         setDbLocation(testDir);
-    });
-
-    afterEach(async () => {
-        await cleanupDir(testDir);
     });
 
     afterAll(async () => {
@@ -250,10 +247,6 @@ describe('Sync with Real Git Repository', () => {
         await git.commit('Initial commit');
     });
 
-    afterEach(async () => {
-        await cleanupDir(testDir);
-    });
-
     afterAll(async () => {
         await cleanupTestRoot();
     });
@@ -293,10 +286,6 @@ describe('performSync Error Handling', () => {
         testDir = getTestDir('sync-error');
         mkdirSync(testDir, { recursive: true });
         setDbLocation(testDir);
-    });
-
-    afterEach(async () => {
-        await cleanupDir(testDir);
     });
 
     afterAll(async () => {

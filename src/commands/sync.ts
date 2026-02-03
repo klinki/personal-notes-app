@@ -98,6 +98,13 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
             console.log("No local changes to commit.");
         }
 
+        const remotes = await git.getRemotes();
+        const hasOrigin = remotes.some(r => r.name === 'origin');
+        if (!hasOrigin) {
+            console.warn("⚠️ No 'origin' remote configured. Skipping pull/push.");
+            return;
+        }
+
         console.log("Pulling changes from remote...");
         try {
             await git.pull('origin', branch, { '--rebase': 'true' });
