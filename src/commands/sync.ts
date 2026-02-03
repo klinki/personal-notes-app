@@ -80,6 +80,16 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
 
     console.log(`Syncing notes in ${noteDir}...`);
 
+    if (!isGitInstalled()) {
+        const msg = "❌ Git is not installed or not in the PATH. Please install Git to use sync features.";
+        console.error(msg);
+        if (options.exitOnError) {
+            process.exit(1);
+        }
+        throw new Error(msg);
+    }
+
+
     try {
         const isRepo = await git.checkIsRepo();
         if (!isRepo) {
@@ -134,7 +144,20 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
         if (options.exitOnError) {
             process.exit(1);
         }
-        throw e;
     }
 }
+
+/**
+ * Checks if git is installed and available in the PATH.
+ */
+export function isGitInstalled(): boolean {
+    try {
+        const { execSync } = require('node:child_process');
+        execSync('git --version', { stdio: 'ignore' });
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 

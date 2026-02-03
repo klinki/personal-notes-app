@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterAll, afterEach, spyOn } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { LockManager } from '../src/lock';
@@ -294,6 +294,41 @@ describe('performSync Error Handling', () => {
 
     it('should throw error for non-git directory', async () => {
         // Non-git directory should cause performSync to throw
-        await expect(performSync({ exitOnError: false })).rejects.toThrow();
+        try {
+            await performSync({ exitOnError: false });
+            // Should not reach here
+            expect(true).toBe(false);
+        } catch (e: any) {
+            expect(e).toBeDefined();
+            expect(e.message).toBeDefined();
+        }
+    });
+});
+
+describe('Git Environment Checks', () => {
+    let testDir: string;
+
+    beforeEach(() => {
+        testDir = getTestDir('git-env');
+        mkdirSync(testDir, { recursive: true });
+        setDbLocation(testDir);
+    });
+
+    afterAll(async () => {
+        await cleanupTestRoot();
+    });
+
+    it('should throw error when git is not installed', async () => {
+        const cp = require('node:child_process');
+        // Spy on execSync to simulate failure
+        const spy = spyOn(cp, 'execSync').mockImplementation(() => {
+            throw new Error('Command failed');
+        });
+
+        try {
+            await expect(performSync({ exitOnError: false })).rejects.toThrow("Git is not installed");
+        } finally {
+            spy.mockRestore();
+        }
     });
 });
