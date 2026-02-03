@@ -6,6 +6,7 @@ import { getConfig, setConfig } from './config';
 import { syncNotes, autoSync } from './commands/sync';
 import { runDaemon } from './commands/daemon';
 import { installService, uninstallService } from './commands/service';
+import { reindexNotes } from './commands/index_cmd';
 
 const program = new Command();
 
@@ -337,6 +338,12 @@ configCommand.command('set')
       console.error(e.message);
       process.exit(1);
     }
+  });
+
+program.command('reindex')
+  .description('Regenerate README.md and INDEX.md files')
+  .action(async () => {
+    await reindexNotes();
   });
 
 program.parse();

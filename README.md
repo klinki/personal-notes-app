@@ -178,6 +178,23 @@ mnote where
 # (Source: standard location)
 ```
 
+### Browsing & Indexing
+
+`mnote` automatically maintains a `README.md` and `INDEX.md` files in your note store to allow for easy browsing of your notes via a file explorer or GitHub/GitLab UI.
+
+- **Root README.md**: A tree view of all your books.
+- **Book INDEX.md**: A list of notes and sub-books within a folder.
+
+These files are updated automatically whenever you add, delete, or move notes using the CLI.
+
+**Manual Reindex:**
+
+If you manually modify files or want to force a regeneration of all index files, use the `reindex` command:
+
+```bash
+mnote reindex
+```
+
 ### Help
 
 You can get help for any command using the `help` command or `--help` / `-h` flags.

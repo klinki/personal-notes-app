@@ -4,6 +4,9 @@ import { mkdir, writeFile, readdir, readFile, unlink, rename } from 'node:fs/pro
 import { existsSync, mkdirSync } from 'node:fs';
 import { Database } from 'bun:sqlite';
 import matter from 'gray-matter';
+import { generateBookIndex, generateRootReadme, reindexAll } from './indexing';
+import { loadConfig } from './config';
+
 
 let MNOTE_HOME = join(homedir(), '.mnote');
 let LOCATION_SOURCE = 'standard location';
@@ -344,6 +347,16 @@ export async function addNote(book: string, content: string, options: AddNoteOpt
     } catch (e: any) {
         console.error('Warning: Failed to update search index:', e.message);
     }
+
+    try {
+        if (await shouldAutoIndex()) {
+            await generateBookIndex(bookPath);
+            await generateRootReadme(getDbInfo().path);
+        }
+    } catch (e: any) {
+        console.error('Warning: Failed to update storage index:', e.message);
+    }
+
     console.log(`Note saved to ${filePath}`);
 }
 
@@ -413,6 +426,15 @@ export async function deleteNote(book: string, index: number) {
     } catch (e: any) {
         console.error('Warning: Failed to update search index:', e.message);
     }
+
+    try {
+        if (await shouldAutoIndex()) {
+            await generateBookIndex(bookPath);
+        }
+    } catch (e: any) {
+        console.error('Warning: Failed to update storage index:', e.message);
+    }
+
     return noteToDelete.filename;
 }
 
@@ -501,6 +523,14 @@ export async function renameBook(oldName: string, newName: string) {
         updateBookInDb(oldName, newName);
     } catch (e: any) {
         console.error('Warning: Failed to update search index:', e.message);
+    }
+
+    try {
+        if (await shouldAutoIndex()) {
+            await reindexAll(resolve(MNOTE_HOME));
+        }
+    } catch (e: any) {
+        console.error('Warning: Failed to regenerate indexes:', e.message);
     }
 }
 
@@ -658,6 +688,13 @@ export async function rebuildDB() {
         }
     }
     console.log(`Rebuild complete. Indexed ${count} notes.`);
+
+    console.log('Regenerating README/INDEX files...');
+    if (await shouldAutoIndex()) {
+        await reindexAll(resolve(MNOTE_HOME));
+    } else {
+        console.log('Skipping index generation (disabled in config).');
+    }
 }
 
 /**
@@ -716,4 +753,13 @@ export async function checkDB(): Promise<DBCheckResult> {
         missingOnDisk,
         missingInDB
     };
+}
+
+
+/**
+ * Checks if automatic indexing is enabled.
+ */
+async function shouldAutoIndex(): Promise<boolean> {
+    const config = await loadConfig();
+    return (config.generateIndexFiles as boolean) ?? true;
 }
