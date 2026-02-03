@@ -248,12 +248,21 @@ For configuration options (like `editor`), the order of precedence is:
 ### Storage Location
 
 By default, notes are stored in `~/.mnote`.
-You can change this by setting the `MNOTE_HOME` environment variable.
 
-```bash
-export MNOTE_HOME=~/my-notes
-mnote list
-```
+You can change this location in two ways:
+
+1.  **Using the `--dbLocation` flag:**
+    Pass the path directly to any command:
+    ```bash
+    mnote list --dbLocation ./my-notes
+    ```
+
+2.  **Using the `MNOTE_HOME` environment variable:**
+    Set the variable in your shell:
+    ```bash
+    export MNOTE_HOME=~/my-notes
+    mnote list
+    ```
 
 ### Editor
 
@@ -288,3 +297,4 @@ Notes are stored as Markdown files with timestamp-based filenames. Directories r
 ```
 
 This structure is compatible with other Markdown-based tools like [Foam](https://foamnotes.com/).
+info

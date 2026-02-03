@@ -44,3 +44,5 @@ mnote
 test-db/
 junit_result*.xml
 test-results.xml
+failed_test_output.txt
+test_debug.txt
