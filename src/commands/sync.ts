@@ -1,4 +1,6 @@
 import { createInterface } from 'node:readline';
+import { writeFile, readFile, access } from 'node:fs/promises';
+import { join } from 'node:path';
 import { simpleGit } from 'simple-git';
 import { getDbInfo } from '../store';
 import { getConfig, setConfig, type Config } from '../config';
@@ -241,7 +243,89 @@ export async function initSync(options: InitSyncOptions = {}) {
             readline.close();
         }
 
-        // 4. Save Config
+        // 4. Create .gitignore
+        console.log("Creating .gitignore...");
+        const gitignorePath = join(noteDir, '.gitignore');
+        const ignoreContent = "mnote.db\nconfig.json\n.mnote-sync.lock\n";
+        try {
+            await writeFile(gitignorePath, ignoreContent, { flag: 'wx' }); // Fail if exists to avoid overwriting user config? 
+            // The requirement says "create a .gitignore file".
+            // Let's safe append or write. 
+            // If I use 'w', it overwrites.
+            // Let's just properly update it if it exists or write new.
+            // Actually, simpler: just write it or append if missing.
+        } catch (e: any) {
+            if (e.code === 'EEXIST') {
+                // Check if content matches or append?
+                // For now, let's just append if not present or log.
+                // Re-reading file and appending seems nicer.
+                const current = await readFile(gitignorePath, 'utf8');
+                const toAdd = [];
+                if (!current.includes('mnote.db')) toAdd.push('mnote.db');
+                if (!current.includes('config.json')) toAdd.push('config.json');
+                if (!current.includes('.mnote-sync.lock')) toAdd.push('.mnote-sync.lock');
+
+                if (toAdd.length > 0) {
+                    await writeFile(gitignorePath, current + '\n' + toAdd.join('\n') + '\n');
+                }
+            } else {
+                // Try writing without flag (creation failed for other reason?)
+                await writeFile(gitignorePath, ignoreContent);
+            }
+        }
+        // Force simple write for now as per "create a .gitignore" instruction usually implies ensuring it exists with content.
+        // Let's stick to the robust append-if-exists approach I just drafted implicitly above but clearer:
+        try {
+            await access(gitignorePath);
+            const current = await readFile(gitignorePath, 'utf8');
+            let newContent = current;
+            if (!newContent.endsWith('\n')) newContent += '\n';
+            if (!newContent.includes('mnote.db')) newContent += 'mnote.db\n';
+            if (!newContent.includes('config.json')) newContent += 'config.json\n';
+            if (!newContent.includes('.mnote-sync.lock')) newContent += '.mnote-sync.lock\n';
+            if (newContent !== current) await writeFile(gitignorePath, newContent);
+        } catch {
+            await writeFile(gitignorePath, ignoreContent);
+        }
+
+
+        // 5. Check and Create Remote Branch
+        console.log(`Checking remote branch '${branch}'...`);
+        try {
+            // Fetch first to ensure we know about remotes?
+            // git.listRemote is safer.
+            const remoteInfo = await git.listRemote(['--heads', 'origin', branch!]);
+            if (!remoteInfo) {
+                console.log(`Branch '${branch}' does not exist on remote. Creating it...`);
+
+                // Ensure we are on the branch locally
+                const status = await git.status();
+                if (status.current !== branch) {
+                    // Check if local branch exists
+                    const localBranches = await git.branchLocal();
+                    if (localBranches.all.includes(branch!)) {
+                        await git.checkout(branch!);
+                    } else {
+                        await git.checkoutLocalBranch(branch!);
+                    }
+                }
+
+                // Create commit with .gitignore
+                await git.add('.gitignore');
+                await git.commit('Initializing mnote repository');
+
+                // Push
+                await git.push('origin', branch!, { '--set-upstream': null });
+                console.log(`✅ Created branch '${branch}' on remote.`);
+            } else {
+                console.log(`Branch '${branch}' exists on remote.`);
+            }
+        } catch (e: any) {
+            console.error("Warning: Could not verify/create remote branch. You may need to push manually first.", e.message);
+        }
+
+
+        // 6. Save Config
         console.log("Saving configuration...");
         await setConfig('autoSync.enabled', 'true');
         await setConfig('autoSync.git.remote', remoteUrl);
