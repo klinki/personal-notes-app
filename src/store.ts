@@ -397,7 +397,7 @@ export async function getNotes(book: string) {
     const entries = await readdir(bookPath);
     const notes = [];
     for (const entry of entries) {
-        if (entry.endsWith('.md')) {
+        if (entry.endsWith('.md') && entry !== 'INDEX.md' && entry !== 'README.md') {
             const content = await readFile(join(bookPath, entry), 'utf-8');
             notes.push({ filename: entry, content });
         }
