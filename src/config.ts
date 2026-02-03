@@ -12,6 +12,7 @@ export interface Config {
         enabled?: boolean;
         git?: {
             branch?: string;
+            remote?: string;
             [key: string]: unknown;
         };
         [key: string]: unknown;

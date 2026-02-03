@@ -1,6 +1,7 @@
+import { createInterface } from 'node:readline';
 import { simpleGit } from 'simple-git';
 import { getDbInfo } from '../store';
-import { getConfig } from '../config';
+import { getConfig, setConfig, type Config } from '../config';
 import { LockManager } from '../lock';
 
 /**
@@ -143,6 +144,114 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
         if (options.exitOnError) {
             process.exit(1);
         }
+    }
+}
+
+/**
+ * Options for initializing the sync configuration.
+ */
+export interface InitSyncOptions {
+    remote?: string;
+    branch?: string;
+}
+
+/**
+ * Initializes the git synchronization environment.
+ * Sets up the git repo, remote, and enables auto-sync.
+ */
+export async function initSync(options: InitSyncOptions = {}) {
+    const noteDir = getDbInfo().path;
+    const git = simpleGit(noteDir);
+
+    console.log(`Initializing sync in ${noteDir}...`);
+
+    if (!isGitInstalled()) {
+        console.error("❌ Git is not installed or not in the PATH. Please install Git first.");
+        return;
+    }
+
+    try {
+        // 1. Initialize Git Repo
+        const isRepo = await git.checkIsRepo();
+        if (!isRepo) {
+            console.log("Initializing git repository...");
+            await git.init();
+        } else {
+            console.log("Git repository already exists.");
+        }
+
+        // 2. Configure Remote
+        let remoteUrl = options.remote;
+        if (!remoteUrl) {
+            try {
+                remoteUrl = (await getConfig('autoSync.git.remote')) as string;
+            } catch { }
+        }
+
+        if (!remoteUrl) {
+            const readline = createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+
+            remoteUrl = await new Promise<string>(resolve => {
+                readline.question('Enter git remote URL (e.g., git@github.com:user/notes.git): ', (answer) => {
+                    resolve(answer.trim());
+                });
+            });
+            readline.close();
+        }
+
+        if (!remoteUrl) {
+            console.error("❌ Remote URL is required for sync.");
+            return;
+        }
+
+        const remotes = await git.getRemotes(true);
+        const origin = remotes.find(r => r.name === 'origin');
+        if (origin) {
+            if (origin.refs.push !== remoteUrl) {
+                console.log(`Updating 'origin' remote to ${remoteUrl}...`);
+                await git.remote(['set-url', 'origin', remoteUrl]);
+            }
+        } else {
+            console.log(`Adding 'origin' remote: ${remoteUrl}...`);
+            await git.addRemote('origin', remoteUrl);
+        }
+
+        // 3. Configure Branch
+        let branch = options.branch;
+        if (!branch) {
+            try {
+                branch = (await getConfig('autoSync.git.branch')) as string;
+            } catch { }
+        }
+
+        if (!branch) {
+            const readline = createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+
+            branch = await new Promise<string>(resolve => {
+                readline.question('Enter branch name (default: main): ', (answer) => {
+                    resolve(answer.trim() || 'main');
+                });
+            });
+            readline.close();
+        }
+
+        // 4. Save Config
+        console.log("Saving configuration...");
+        await setConfig('autoSync.enabled', 'true');
+        await setConfig('autoSync.git.remote', remoteUrl);
+        await setConfig('autoSync.git.branch', branch!);
+
+        console.log("✅ Sync initialized and enabled!");
+        console.log("run 'mnote sync' to perform the first sync.");
+
+    } catch (e: any) {
+        console.error("Error initializing sync:", e.message);
     }
 }
 
