@@ -3,9 +3,20 @@ import { existsSync } from 'node:fs';
 import { getConfigPath } from './store';
 
 /**
- * Configuration object type with string keys and unknown values.
+ * Configuration object type with known keys and strict types.
+ * Extensible - allows adding new keys without breaking the type.
  */
-interface Config {
+export interface Config {
+    editor?: string;
+    autoSync?: {
+        enabled?: boolean;
+        git?: {
+            branch?: string;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+    generateIndexFiles?: boolean;
     [key: string]: unknown;
 }
 
@@ -83,13 +94,13 @@ export async function getConfig(keyPath: string): Promise<unknown> {
 
     for (const key of keys) {
         if (current === undefined || current === null) {
-             throw new Error(`Config key "${keyPath}" not found`);
+            throw new Error(`Config key "${keyPath}" not found`);
         }
         current = (current as Config)[key];
     }
 
     if (current === undefined) {
-         throw new Error(`Config key "${keyPath}" not found`);
+        throw new Error(`Config key "${keyPath}" not found`);
     }
 
     return current;

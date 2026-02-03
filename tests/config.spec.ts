@@ -90,4 +90,16 @@ describe("Config", () => {
         process.env.EDITOR = "code";
         expect(await config.getEditorConfig()).toBe("code");
     });
+
+    it("should handle autoSync config structure", async () => {
+        await config.setConfig("autoSync.enabled", "true");
+        await config.setConfig("autoSync.git.branch", "main");
+
+        expect(await config.getConfig("autoSync.enabled")).toBe(true);
+        expect(await config.getConfig("autoSync.git.branch")).toBe("main");
+
+        const full = await config.loadConfig();
+        expect(full.autoSync?.enabled).toBe(true);
+        expect(full.autoSync?.git?.branch).toBe("main");
+    });
 });

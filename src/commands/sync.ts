@@ -27,8 +27,8 @@ export async function syncNotes() {
  */
 export async function autoSync() {
     try {
-        const enabled = await getConfig('autosync');
-        if (enabled === true || enabled === 'true') {
+        const enabled = await getConfig('autoSync.enabled');
+        if (enabled === true) {
             console.log("🔄 Auto-syncing...");
 
             const lock = new LockManager();
@@ -73,7 +73,7 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
     // Get git branch from config, default to 'master'
     let branch = 'master';
     try {
-        branch = (await getConfig('git.branch')) as string | 'master';
+        branch = (await getConfig('autoSync.git.branch')) as string || 'master';
     } catch {
         // Config key doesn't exist, use default
     }
@@ -88,7 +88,6 @@ export async function performSync(options: SyncOptions = { exitOnError: true }) 
         }
         throw new Error(msg);
     }
-
 
     try {
         const isRepo = await git.checkIsRepo();
@@ -159,5 +158,3 @@ export function isGitInstalled(): boolean {
         return false;
     }
 }
-
-
