@@ -245,48 +245,7 @@ export async function initSync(options: InitSyncOptions = {}) {
 
         // 4. Create .gitignore
         console.log("Creating .gitignore...");
-        const gitignorePath = join(noteDir, '.gitignore');
-        const ignoreContent = "mnote.db\nconfig.json\n.mnote-sync.lock\n";
-        try {
-            await writeFile(gitignorePath, ignoreContent, { flag: 'wx' }); // Fail if exists to avoid overwriting user config? 
-            // The requirement says "create a .gitignore file".
-            // Let's safe append or write. 
-            // If I use 'w', it overwrites.
-            // Let's just properly update it if it exists or write new.
-            // Actually, simpler: just write it or append if missing.
-        } catch (e: any) {
-            if (e.code === 'EEXIST') {
-                // Check if content matches or append?
-                // For now, let's just append if not present or log.
-                // Re-reading file and appending seems nicer.
-                const current = await readFile(gitignorePath, 'utf8');
-                const toAdd = [];
-                if (!current.includes('mnote.db')) toAdd.push('mnote.db');
-                if (!current.includes('config.json')) toAdd.push('config.json');
-                if (!current.includes('.mnote-sync.lock')) toAdd.push('.mnote-sync.lock');
-
-                if (toAdd.length > 0) {
-                    await writeFile(gitignorePath, current + '\n' + toAdd.join('\n') + '\n');
-                }
-            } else {
-                // Try writing without flag (creation failed for other reason?)
-                await writeFile(gitignorePath, ignoreContent);
-            }
-        }
-        // Force simple write for now as per "create a .gitignore" instruction usually implies ensuring it exists with content.
-        // Let's stick to the robust append-if-exists approach I just drafted implicitly above but clearer:
-        try {
-            await access(gitignorePath);
-            const current = await readFile(gitignorePath, 'utf8');
-            let newContent = current;
-            if (!newContent.endsWith('\n')) newContent += '\n';
-            if (!newContent.includes('mnote.db')) newContent += 'mnote.db\n';
-            if (!newContent.includes('config.json')) newContent += 'config.json\n';
-            if (!newContent.includes('.mnote-sync.lock')) newContent += '.mnote-sync.lock\n';
-            if (newContent !== current) await writeFile(gitignorePath, newContent);
-        } catch {
-            await writeFile(gitignorePath, ignoreContent);
-        }
+        await createGitIgnore(noteDir);
 
 
         // 5. Check and Create Remote Branch
@@ -351,3 +310,41 @@ export function isGitInstalled(): boolean {
         return false;
     }
 }
+
+/**
+ * Creates or updates the .gitignore file with necessary entries.
+ * @param noteDir - The directory where the .gitignore file should be located
+ */
+export async function createGitIgnore(noteDir: string) {
+    const gitignorePath = join(noteDir, '.gitignore');
+    const entriesToCheck = [
+        'mnote.db',
+        'config.json',
+        '.mnote-sync.lock',
+        '*.db',
+        '*.db-shm',
+        '*.db-wal'
+    ];
+
+    try {
+        await access(gitignorePath);
+        const current = await readFile(gitignorePath, 'utf8');
+        let newContent = current;
+        if (!newContent.endsWith('\n')) newContent += '\n';
+
+        for (const entry of entriesToCheck) {
+            if (!newContent.includes(entry)) {
+                newContent += `${entry}\n`;
+            }
+        }
+
+        if (newContent !== current) {
+            await writeFile(gitignorePath, newContent);
+        }
+    } catch {
+        // File doesn't exist, create it
+        const ignoreContent = entriesToCheck.join('\n') + '\n';
+        await writeFile(gitignorePath, ignoreContent);
+    }
+}
+
